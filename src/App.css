@@ -1,0 +1,227 @@
+/* index.css */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body,
+html,
+#root {
+  height: 100%;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f5f7fa;
+  color: #333;
+}
+
+:root {
+  --bg-color: #ffffff;
+  --text-color: #111111;
+  --sidebar-bg: #ffffff;
+  --accent: #2196f3;
+  --active-color: #eeeeee;
+  --main-content-bg: #ffffff;
+  --card-background: rgba(255, 255, 255, 0.05);
+  --card-color: #e0e0e0;
+  --add-task-bg:  rgba(25, 118, 210, 0.15);
+  --add-task-color: #1976d2;
+  --task-panel: #f9f9f9;
+  --task-bg-right: white;
+}
+
+body.dark {
+  --bg-color: #1e1e2f;
+  --text-color: #eeeeee;
+  --sidebar-bg: #2c2c3a;
+  --accent: #90caf9;
+  --active-color: #111111;
+  --main-content-bg: #1e1e2f;
+  --card-background: rgba(255, 255, 255, 0.05);
+  --card-color: #e0e0e0;
+  --add-task-bg:  white;
+   --add-task-color: blue;
+   --task-panel: #2c2c3a;
+     --task-bg-right: #2c2c3a;
+}
+
+body,
+.app {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+
+.add-task-button { 
+  background-color: var(--add-task-bg);
+  color: var(--add-task-color);
+  
+}
+
+.sidebar {
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid #ddd;
+}
+.today-tasks {
+  background-color: var( --task-panel);
+  /* border-right: 1px solid #ddd; */
+}
+.task-item{
+  background-color: var(--task-bg-right);
+}
+
+.main-content {
+  background-color: var(--main-content-bg);
+}
+
+.menu-item.active {
+  background-color: var(--accent);
+  color: var(--active-color);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* For main layout structure inside AppLayout */
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* Prevent overflow */
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* .dashboard-placeholder {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+} */
+ \.dashboard-placeholder {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 24px;
+    
+    /* 1. THE BORDER GRADIENT */
+    /* We use border-image-source with a conic-gradient to hit 4 colors at the corners */
+    border: 4px dashed;
+    border-image-source: conic-gradient(
+        #ff0080, /* Color 1 (Pink) */
+        #7928ca, /* Color 2 (Purple) */
+        #0070f3, /* Color 3 (Blue) */
+        #00dfd8, /* Color 4 (Teal) */
+        #ff0080  /* Loop back to Color 1 */
+    );
+    border-image-slice: 1;
+
+    /* 2. THE TEXT GRADIENT */
+    /* Standard trick to apply gradient to text */
+    background: linear-gradient(to right, #ff0080, #7928ca, #0070f3, #00dfd8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent; /* Fallback */
+
+    /* Glassy/Modern Feel */
+    background-color: rgba(255, 255, 255, 0.02);
+    transition: all 0.3s ease;
+}
+
+/* Optional: Subtle pulse animation to make it pop */
+.dashboard-placeholder:hover {
+    filter: brightness(1.2);
+    transform: scale(0.99);
+}
+
+/* ====================================== */
+.task-enter {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.task-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: all 300ms;
+}
+
+.task-exit {
+  opacity: 1;
+}
+
+.task-exit-active {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;  /* header + main stack */
+  height: 90dvh;          /* use dynamic vh for mobile browsers */
+}
+.template-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.template-select label {
+  font-weight: 500;
+}
+
+.template-select select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+.editing-title {
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+.error {
+  color: red;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.glass-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  /* Transparency and Blur */
+  background: rgba(255, 255, 255, 0.7); 
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Safari support */
+  
+  /* Subtle Border and Shadow */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+  
+  transition: all 0.3s ease;
+}
+
+.layout-content {
+  /* This ensures your content starts AFTER the header height */
+  padding-top: 64px; 
+  background: #f8f9fa;
+  min-height: 100vh;
+}
