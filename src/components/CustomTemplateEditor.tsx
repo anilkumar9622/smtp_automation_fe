@@ -456,7 +456,7 @@ const ModernEmailEditor: React.FC = () => {
             <p>{currentTemplate?.subject || "No subject set"}</p>
           </Card>
 
-          {/* <Button
+          <Button
             block
             type="primary"
             size="middle"
@@ -469,7 +469,7 @@ const ModernEmailEditor: React.FC = () => {
             }}
           >
             Edit Source Code
-          </Button> */}
+          </Button>
         </Sider>
       </Layout>
 
