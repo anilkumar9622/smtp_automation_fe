@@ -8,6 +8,8 @@ export const saveTemplateService = async (data: {
   subject?: string;
   design?: any;
   html: string;
+  property_code?: string;
+  property_name?: string;
 }) => {
   try {
     const res = await api.post(API_ENDPOINTS.emailTemplate, data);

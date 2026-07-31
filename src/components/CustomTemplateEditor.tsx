@@ -148,6 +148,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio } from "antd";
 import { PlusOutlined, CodeOutlined, EyeOutlined, SaveOutlined, EditOutlined, LinkOutlined, PictureOutlined } from "@ant-design/icons";
 import { getAllTemplatesService, saveTemplateService } from "../services/emailTemplateServices";
+import { PROPERTY_OPTIONS, PROPERTY_VARIANTS } from "../app-constant/propertyCodes";
 
 const { Header, Content, Sider } = Layout;
 const { TextArea } = Input;
@@ -159,6 +160,8 @@ interface Template {
   title: string;
   subject?: string;
   html: string;
+  property_code?: string;
+  property_name?: string;
 }
 
 const ModernEmailEditor: React.FC = () => {
@@ -178,6 +181,25 @@ const ModernEmailEditor: React.FC = () => {
     subject: "",
     html: "<html><body><h1>New Template</h1></body></html>"
   });
+  // Which customer/agent variant the new template is for — only meaningful
+  // once a property is picked below (see applyPropertyAndVariant).
+  const [newVariant, setNewVariant] = useState<"customer" | "agent">("customer");
+
+  // Each property has its own customer/agent template pair, named
+  // "<code>_for_<variant>" (matching the backend's buildTemplateName), so
+  // picking a property + variant auto-fills name/title/property_name —
+  // still editable afterward if you want a custom internal name.
+  const applyPropertyAndVariant = (propertyCode?: string, variant: "customer" | "agent" = newVariant) => {
+    const property = PROPERTY_OPTIONS.find((p) => p.code === propertyCode);
+    if (!property) return;
+    setNewTemplate((prev) => ({
+      ...prev,
+      property_code: property.code,
+      property_name: property.name,
+      name: `${property.code.toLowerCase()}_for_${variant}`,
+      title: `${property.name} - ${variant === "customer" ? "Customer" : "Agent"} Booking`,
+    }));
+  };
 
   useEffect(() => {
     fetchTemplates();
@@ -452,6 +474,13 @@ const ModernEmailEditor: React.FC = () => {
             <Text type="secondary">Internal Name:</Text>
             <p><strong>{currentTemplate?.name}</strong></p>
             <Divider style={{ margin: "12px 0" }} />
+            <Text type="secondary">Property:</Text>
+            <p>
+              {currentTemplate?.property_name
+                ? `${currentTemplate.property_name} (${currentTemplate.property_code})`
+                : "Not property-specific"}
+            </p>
+            <Divider style={{ margin: "12px 0" }} />
             <Text type="secondary">Subject Line:</Text>
             <p>{currentTemplate?.subject || "No subject set"}</p>
           </Card>
@@ -483,9 +512,39 @@ const ModernEmailEditor: React.FC = () => {
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <div>
+            <Text strong>Property (optional)</Text>
+            <Select
+              allowClear
+              placeholder="Not property-specific"
+              style={{ width: '100%' }}
+              value={newTemplate.property_code || undefined}
+              options={PROPERTY_OPTIONS.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` }))}
+              onChange={(code) => applyPropertyAndVariant(code)}
+              onClear={() => setNewTemplate((prev) => ({ ...prev, property_code: undefined, property_name: undefined }))}
+            />
+          </div>
+          {newTemplate.property_code && (
+            <div>
+              <Text strong>Variant</Text>
+              <div style={{ marginTop: 6 }}>
+                <Radio.Group
+                  value={newVariant}
+                  onChange={(e) => {
+                    setNewVariant(e.target.value);
+                    applyPropertyAndVariant(newTemplate.property_code, e.target.value);
+                  }}
+                >
+                  {PROPERTY_VARIANTS.map((v) => (
+                    <Radio.Button key={v.value} value={v.value}>{v.label}</Radio.Button>
+                  ))}
+                </Radio.Group>
+              </div>
+            </div>
+          )}
+          <div>
             <Text strong>Internal Unique Name</Text>
-            <Input 
-              placeholder="e.g., booking_confirmation_2024" 
+            <Input
+              placeholder="e.g., booking_confirmation_2024"
               value={newTemplate.name}
               onChange={e => setNewTemplate({...newTemplate, name: e.target.value})}
             />
