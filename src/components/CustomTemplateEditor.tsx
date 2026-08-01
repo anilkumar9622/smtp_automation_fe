@@ -145,14 +145,15 @@
 // export default RawHtmlEditor;
 
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio } from "antd";
-import { PlusOutlined, CodeOutlined, EyeOutlined, SaveOutlined, EditOutlined, LinkOutlined, PictureOutlined } from "@ant-design/icons";
-import { getAllTemplatesService, saveTemplateService } from "../services/emailTemplateServices";
+import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio, Upload, Grid } from "antd";
+import { PlusOutlined, CodeOutlined, EyeOutlined, SaveOutlined, EditOutlined, LinkOutlined, PictureOutlined, UploadOutlined } from "@ant-design/icons";
+import { getAllTemplatesService, saveTemplateService, uploadImageService, listImageGalleryService } from "../services/emailTemplateServices";
 import { PROPERTY_OPTIONS, PROPERTY_VARIANTS } from "../app-constant/propertyCodes";
 
 const { Header, Content, Sider } = Layout;
 const { TextArea } = Input;
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface Template {
   id?: number;
@@ -165,6 +166,9 @@ interface Template {
 }
 
 const ModernEmailEditor: React.FC = () => {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md; // narrower than antd's md breakpoint (768px)
+
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -243,7 +247,21 @@ const ModernEmailEditor: React.FC = () => {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageEditId, setImageEditId] = useState<string>("");
   const [imageSrc, setImageSrc] = useState<string>("");
-  const [imageAlt, setImageAlt] = useState<string>("");
+  const [imageUploading, setImageUploading] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<{ fileId: string; name: string; url: string }[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+
+  // Load the Drive gallery each time the modal opens, so newly uploaded
+  // images (including the one just uploaded in this same session) show up
+  // for reuse instead of triggering a duplicate upload.
+  useEffect(() => {
+    if (!imageModalOpen) return;
+    setGalleryLoading(true);
+    listImageGalleryService()
+      .then(setGalleryImages)
+      .catch((err) => message.error(err.message || "Failed to load gallery"))
+      .finally(() => setGalleryLoading(false));
+  }, [imageModalOpen]);
 
   // Reads back whatever the user has typed directly into the preview.
   const captureIframeHtml = (): string => {
@@ -299,7 +317,6 @@ const ModernEmailEditor: React.FC = () => {
         }
         setImageEditId(img.dataset.editId);
         setImageSrc(img.getAttribute("src") || "");
-        setImageAlt(img.getAttribute("alt") || "");
         setImageModalOpen(true);
         return;
       }
@@ -329,7 +346,6 @@ const ModernEmailEditor: React.FC = () => {
     const el = doc?.querySelector(`[data-edit-id="${imageEditId}"]`) as HTMLImageElement | null;
     if (el && imageSrc.trim()) {
       el.setAttribute("src", imageSrc.trim());
-      el.setAttribute("alt", imageAlt);
     }
     setImageModalOpen(false);
   };
@@ -398,37 +414,39 @@ const ModernEmailEditor: React.FC = () => {
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
   return (
-    <Layout style={{ height: "100%", minHeight: 0, background: "#f8f9fa" }}>
+    <Layout style={{ height: "100%", width: "100%", minHeight: 0, background: "#f8f9fa", overflowY: isMobile ? "auto" : "hidden" }}>
       {/* MODERN HEADER */}
-      <Header style={{ 
-        background: "#fff", 
-        padding: "0 24px", 
-        height: "64px", 
-        display: "flex", 
-        alignItems: "center", 
+      <Header style={{
+        background: "#fff",
+        padding: isMobile ? "12px 16px" : "0 24px",
+        height: isMobile ? "auto" : "64px",
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
         justifyContent: "space-between",
+        gap: isMobile ? 12 : 0,
         boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
         zIndex: 10
       }}>
-        <Space size="large">
+        <Space size="large" wrap style={{ width: isMobile ? "100%" : "auto" }}>
           <Title level={4} style={{ margin: 0, color: "#1890ff" }}>Email Studio</Title>
           <Select
             value={selectedKey}
             onChange={(val) => setSelectedKey(val)}
-            style={{ width: 280 }}
+            style={{ width: isMobile ? "100%" : 280, minWidth: isMobile ? 200 : undefined }}
             placeholder="Select a template"
             options={templates.map((t) => ({ value: t.name, label: t.title }))}
           />
-          <Button 
-            type="dashed" 
-            icon={<PlusOutlined />} 
+          <Button
+            type="dashed"
+            icon={<PlusOutlined />}
             onClick={() => setIsCreateModalOpen(true)}
           >
             Create New
           </Button>
         </Space>
 
-        <Space>
+        <Space wrap style={{ width: isMobile ? "100%" : "auto" }}>
           <Button icon={<EyeOutlined />} onClick={openInNewTab}>Browser Preview</Button>
           <Button type="primary" icon={<SaveOutlined />} onClick={handleSaveExisting}>
             Save Changes
@@ -436,71 +454,111 @@ const ModernEmailEditor: React.FC = () => {
         </Space>
       </Header>
 
-      <Layout style={{ height: "calc(100% - 64px)", minHeight: 0 }}>
-        {/* PREVIEW CANVAS */}
-        <Content style={{ padding: "30px", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style={{ width: "920px", minWidth: "920px", marginBottom: "12px", flexShrink: 0 }}>
-            <Text type="secondary">
-              <EditOutlined /> Click directly into the text below to edit it. <LinkOutlined /> Click a link or phone number to change its destination. <PictureOutlined /> Click a logo, banner, or thumbnail to swap its image. Then hit "Save Changes".
-            </Text>
-          </div>
-          <div style={{
-            width: "920px",
-            minWidth: "920px",
-            flex: 1,
-            minHeight: 0,
-            background: "#fff",
-            borderRadius: "8px",
-            boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
-            overflow: "hidden"
-          }}>
-             {/* Fixed-size box; the iframe fills it and scrolls internally via
-                its own native scrollbar for content taller than the box
-                (e.g. to reach the footer), rather than the outer page scrolling. */}
-             <iframe
-              ref={iframeRef}
-              key={selectedKey + editHtml.length} // Force refresh on change
-              title="Preview"
-              srcDoc={editHtml}
-              onLoad={enableInlineEditing}
-              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
-            />
-          </div>
-        </Content>
+      {(() => {
+        // Extracted so mobile can render these in plain stacked <div>s
+        // (normal document flow) instead of nesting antd's Layout/Sider
+        // inside another dynamically-flex-directioned Layout, which was
+        // collapsing the preview to near-zero width on mobile — flexbox
+        // "stretch" sizing across two nested column-direction containers
+        // doesn't propagate reliably here.
+        const previewCanvas = (
+          <>
+            <div style={{ width: isMobile ? "100%" : "920px", marginBottom: "12px", flexShrink: 0, boxSizing: "border-box" }}>
+              <Text type="secondary">
+                <EditOutlined /> Click directly into the text below to edit it. <LinkOutlined /> Click a link or phone number to change its destination. <PictureOutlined /> Click a logo, banner, or thumbnail to swap its image. Then hit "Save Changes".
+              </Text>
+            </div>
+            <div style={{
+              width: isMobile ? "100%" : "920px",
+              flex: isMobile ? "0 0 auto" : 1,
+              height: isMobile ? "70vh" : undefined,
+              minHeight: isMobile ? 320 : 0,
+              boxSizing: "border-box",
+              background: "#fff",
+              borderRadius: "8px",
+              boxShadow: "0 10px 25px rgba(0,0,0,0.05)",
+              overflow: "hidden"
+            }}>
+              {/* Fixed-size box; the iframe fills it and scrolls internally via
+                 its own native scrollbar for content taller than the box
+                 (e.g. to reach the footer), rather than the outer page scrolling. */}
+              <iframe
+                ref={iframeRef}
+                key={selectedKey + editHtml.length} // Force refresh on change
+                title="Preview"
+                srcDoc={editHtml}
+                onLoad={enableInlineEditing}
+                style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+              />
+            </div>
+          </>
+        );
 
-        {/* INFO SIDEBAR */}
-        <Sider width={300} theme="light" style={{ borderLeft: "1px solid #f0f0f0", padding: "20px" }}>
-          <Card size="small" title="Template Info" bordered={false}>
-            <Text type="secondary">Internal Name:</Text>
-            <p><strong>{currentTemplate?.name}</strong></p>
-            <Divider style={{ margin: "12px 0" }} />
-            <Text type="secondary">Property:</Text>
-            <p>
-              {currentTemplate?.property_name
-                ? `${currentTemplate.property_name} (${currentTemplate.property_code})`
-                : "Not property-specific"}
-            </p>
-            <Divider style={{ margin: "12px 0" }} />
-            <Text type="secondary">Subject Line:</Text>
-            <p>{currentTemplate?.subject || "No subject set"}</p>
-          </Card>
+        const infoSidebar = (
+          <>
+            <Card size="small" title="Template Info" bordered={false}>
+              <Text type="secondary">Internal Name:</Text>
+              <p><strong>{currentTemplate?.name}</strong></p>
+              <Divider style={{ margin: "12px 0" }} />
+              <Text type="secondary">Property:</Text>
+              <p>
+                {currentTemplate?.property_name
+                  ? `${currentTemplate.property_name} (${currentTemplate.property_code})`
+                  : "Not property-specific"}
+              </p>
+              <Divider style={{ margin: "12px 0" }} />
+              <Text type="secondary">Subject Line:</Text>
+              <p>{currentTemplate?.subject || "No subject set"}</p>
+            </Card>
 
-          <Button
-            block
-            type="primary"
-            size="middle"
-            icon={<CodeOutlined />}
-            style={{ marginTop: "20px" }}
-            onClick={() => {
-              // Sync the modal with whatever was just edited inline on the preview.
-              setEditHtml(captureIframeHtml());
-              setIsEditModalOpen(true);
-            }}
-          >
-            Edit Source Code
-          </Button>
-        </Sider>
-      </Layout>
+            <Button
+              block
+              type="primary"
+              size="middle"
+              icon={<CodeOutlined />}
+              style={{ marginTop: "20px" }}
+              onClick={() => {
+                // Sync the modal with whatever was just edited inline on the preview.
+                setEditHtml(captureIframeHtml());
+                setIsEditModalOpen(true);
+              }}
+            >
+              Edit Source Code
+            </Button>
+          </>
+        );
+
+        if (isMobile) {
+          return (
+            <div style={{ width: "100%", boxSizing: "border-box" }}>
+              <div style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}>
+                {previewCanvas}
+              </div>
+              <div style={{ width: "100%", boxSizing: "border-box", borderTop: "1px solid #f0f0f0", padding: "20px" }}>
+                {infoSidebar}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <Layout style={{ height: "calc(100% - 64px)", minHeight: 0 }}>
+            <Content style={{ padding: "30px", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {previewCanvas}
+            </Content>
+            <Sider width={300} theme="light" style={{ borderLeft: "1px solid #f0f0f0", padding: "20px" }}>
+              {infoSidebar}
+            </Sider>
+          </Layout>
+        );
+      })()}
 
       {/* MODAL: CREATE NEW TEMPLATE */}
       <Modal
@@ -645,28 +703,94 @@ const ModernEmailEditor: React.FC = () => {
       >
         <Space direction="vertical" style={{ width: "100%" }} size="middle">
           <div>
-            <Text strong>Image URL</Text>
-            <Input
-              placeholder="e.g. https://i.postimg.cc/xxxxx/new-image.jpg"
-              value={imageSrc}
-              onChange={(e) => setImageSrc(e.target.value)}
-            />
+            <Upload
+              showUploadList={false}
+              accept="image/*"
+              customRequest={async (options) => {
+                const { file, onSuccess, onError } = options;
+                setImageUploading(true);
+                try {
+                  const result = await uploadImageService(file as File);
+                  setImageSrc(result.url);
+                  // Show it in the gallery immediately, without waiting on a refetch.
+                  setGalleryImages((prev) => [
+                    { fileId: result.fileId, name: (file as File).name, url: result.url },
+                    ...prev,
+                  ]);
+                  message.success("Image uploaded to Google Drive");
+                  onSuccess?.(result);
+                } catch (err: any) {
+                  message.error(err.message || "Upload failed");
+                  onError?.(err);
+                } finally {
+                  setImageUploading(false);
+                }
+              }}
+            >
+              <Button icon={<UploadOutlined />} loading={imageUploading} block>
+                {imageUploading ? "Uploading..." : "Upload from your computer"}
+              </Button>
+            </Upload>
           </div>
+
           <div>
-            <Text strong>Alt Text</Text>
-            <Input
-              placeholder="Short description of the image"
-              value={imageAlt}
-              onChange={(e) => setImageAlt(e.target.value)}
-            />
+            <Text strong>Or choose from gallery</Text>
+            <div
+              style={{
+                marginTop: 6,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
+                gap: 8,
+                maxHeight: 220,
+                overflowY: "auto",
+                border: "1px solid #f0f0f0",
+                borderRadius: 8,
+                padding: 8,
+              }}
+            >
+              {galleryLoading && <Spin size="small" />}
+              {!galleryLoading && galleryImages.length === 0 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>No images uploaded yet.</Text>
+              )}
+              {galleryImages.map((img) => (
+                <div
+                  key={img.fileId}
+                  onClick={() => setImageSrc(img.url)}
+                  title={img.name}
+                  style={{
+                    cursor: "pointer",
+                    border: imageSrc === img.url ? "2px solid #1890ff" : "1px solid #f0f0f0",
+                    borderRadius: 6,
+                    padding: 2,
+                    height: 70,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    // lh3.googleusercontent.com rate-limits (429) requests
+                    // that carry a Referer header, which browsers send by
+                    // default for <img> tags but curl doesn't — hence why
+                    // this worked in manual API testing but not on-screen.
+                    referrerPolicy="no-referrer"
+                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
+
           {imageSrc.trim() && (
             <div>
-              <Text strong>Preview</Text>
+              <Text strong>Selected</Text>
               <div style={{ marginTop: 6, border: "1px solid #f0f0f0", borderRadius: 8, padding: 8, textAlign: "center" }}>
                 <img
                   src={imageSrc}
-                  alt={imageAlt}
+                  referrerPolicy="no-referrer"
                   style={{ maxWidth: "100%", maxHeight: 200, objectFit: "contain" }}
                 />
               </div>

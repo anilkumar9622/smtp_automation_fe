@@ -52,3 +52,32 @@ export const deleteTemplateService = async (name: string) => {
     throw new Error("Failed to delete template");
   }
 };
+
+// ✅ Upload an image (logo/banner/thumbnail) to Google Drive, get back a
+// publicly viewable link usable directly in template HTML.
+export const uploadImageService = async (file: File): Promise<{ url: string; fileId: string; viewUrl: string }> => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await api.post(API_ENDPOINTS.uploadImage, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+
+    return res.data.data;
+  } catch (error: any) {
+    throw new Error(error?.response?.data?.message || "Image upload failed");
+  }
+};
+
+// ✅ List images already uploaded to Drive, so the user can reuse one
+// instead of uploading a duplicate.
+export const listImageGalleryService = async (): Promise<{ fileId: string; name: string; url: string }[]> => {
+  try {
+    const res = await api.get(API_ENDPOINTS.uploadGallery);
+
+    return res.data.data;
+  } catch (error: any) {
+    throw new Error(error?.response?.data?.message || "Failed to load gallery");
+  }
+};
