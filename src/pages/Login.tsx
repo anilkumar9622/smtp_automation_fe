@@ -19,10 +19,10 @@ const Login = () => {
     const validateEmail = () => {
         let error = "";
 
+        // Staff log in with a short username (e.g. "tlpj"), not necessarily
+        // a real email address, so this only checks presence, not format.
         if (!email) {
-            error = "Email is required";
-        } else if (!/^\S+@\S+\.\S+$/.test(email)) {
-            error = "Invalid email format";
+            error = "Username or email is required";
         }
 
         setErrors((prev) => ({ ...prev, email: error }));
@@ -94,10 +94,10 @@ const Login = () => {
                     <h2 style={{ fontSize: "20px" }}>Welcome Back</h2>
                     <p className="sub-text" style={{ fontSize: "13px" }}>Sign in your account</p>
 
-                    <label style={{ fontSize: "14px", marginTop: "30px" }}>Email</label>
+                    <label style={{ fontSize: "14px", marginTop: "30px" }}>Username or Email</label>
                     <input
-                        type="email"
-                        placeholder="Enter email"
+                        type="text"
+                        placeholder="Enter username or email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         onBlur={validateEmail}

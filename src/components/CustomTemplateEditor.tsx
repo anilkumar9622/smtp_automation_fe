@@ -169,6 +169,20 @@ const ModernEmailEditor: React.FC = () => {
   const screens = useBreakpoint();
   const isMobile = !screens.md; // narrower than antd's md breakpoint (768px)
 
+  // Only a super admin can create brand-new templates or touch raw source
+  // code — admins/property operators can still edit content inline and
+  // save, just not those two actions. The backend enforces the same rule
+  // independently (see EmailTemplate.controller.ts), so hiding these
+  // buttons is a UX nicety, not the actual security boundary.
+  const currentUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null");
+    } catch {
+      return null;
+    }
+  })();
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -237,7 +251,7 @@ const ModernEmailEditor: React.FC = () => {
   // (URL) or a phone number (tel:) inside the preview.
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkEditId, setLinkEditId] = useState<string>("");
-  const [linkType, setLinkType] = useState<"url" | "tel">("url");
+  const [linkType, setLinkType] = useState<"url" | "tel" | "email">("url");
   const [linkValue, setLinkValue] = useState<string>("");
   const [linkText, setLinkText] = useState<string>("");
   const [linkOriginalText, setLinkOriginalText] = useState<string>("");
@@ -263,11 +277,93 @@ const ModernEmailEditor: React.FC = () => {
       .finally(() => setGalleryLoading(false));
   }, [imageModalOpen]);
 
+  // Merge tags that stay directly editable in the preview even though
+  // every other {{tag}} is frozen (see freezeMergeTags below) — these two
+  // are effectively free-text signature fields, not data pulled from the
+  // parsed PDF, so editing them in place is safe.
+  const EDITABLE_MERGE_TAGS = new Set(["manager_name", "manager_title"]);
+  const MERGE_TAG_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
+
+  // Wraps every {{merge_tag}} text occurrence (other than the exceptions
+  // above) in a contenteditable="false" span. Nested contenteditable="false"
+  // elements are the standard way to create non-editable "islands" inside
+  // a designMode/contentEditable region — the browser won't place a caret
+  // inside them or let their text be altered, while everything else in the
+  // document stays freely editable.
+  const freezeMergeTags = (doc: Document) => {
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (MERGE_TAG_REGEX.test(node.nodeValue || "")) textNodes.push(node as Text);
+      MERGE_TAG_REGEX.lastIndex = 0;
+    }
+
+    textNodes.forEach((textNode) => {
+      const text = textNode.nodeValue || "";
+      const frag = doc.createDocumentFragment();
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      MERGE_TAG_REGEX.lastIndex = 0;
+      while ((match = MERGE_TAG_REGEX.exec(text))) {
+        const [full, key] = match;
+        if (match.index > lastIndex) {
+          frag.appendChild(doc.createTextNode(text.slice(lastIndex, match.index)));
+        }
+        if (EDITABLE_MERGE_TAGS.has(key)) {
+          frag.appendChild(doc.createTextNode(full));
+        } else {
+          const span = doc.createElement("span");
+          span.setAttribute("contenteditable", "false");
+          span.setAttribute("data-merge-tag", key);
+          span.textContent = full;
+          frag.appendChild(span);
+        }
+        lastIndex = match.index + full.length;
+      }
+      if (lastIndex < text.length) {
+        frag.appendChild(doc.createTextNode(text.slice(lastIndex)));
+      }
+      textNode.parentNode?.replaceChild(frag, textNode);
+    });
+  };
+
   // Reads back whatever the user has typed directly into the preview.
+  // Works on a detached clone so editor-only affordances — the frozen
+  // merge-tag spans and the injected hover-style <style> tag — are
+  // stripped out for the saved/exported HTML, without disturbing the
+  // live, still-frozen/hover-styled preview.
   const captureIframeHtml = (): string => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return editHtml;
-    return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
+    const clone = doc.documentElement.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("span[data-merge-tag]").forEach((span) => {
+      span.replaceWith(span.textContent || "");
+    });
+    clone.querySelectorAll("[data-studio-only]").forEach((el) => el.remove());
+    return `<!DOCTYPE html>\n${clone.outerHTML}`;
+  };
+
+  // Visually distinguishes, on hover, what a click will actually do —
+  // otherwise a rendered email template gives no clue which parts are
+  // plain editable text versus a link/image/frozen field with its own
+  // modal. Injected once per fresh iframe document.
+  const injectHoverStyles = (doc: Document) => {
+    const style = doc.createElement("style");
+    style.setAttribute("data-studio-only", "true");
+    style.textContent = `
+      a:hover { outline: 2px dashed #1890ff; outline-offset: 2px; cursor: pointer !important; background: rgba(24,144,255,0.06); }
+      img:hover { outline: 2px dashed #52c41a; outline-offset: 2px; cursor: pointer !important; }
+      a:hover img { outline: 2px dashed #1890ff; }
+      [data-merge-tag]:hover { outline: 2px dashed #bfbfbf; cursor: not-allowed !important; background: rgba(0,0,0,0.05); }
+      p:hover, h1:hover, h2:hover, h3:hover, h4:hover, li:hover, span:hover:not([data-merge-tag]) {
+        outline: 1px dashed rgba(24,144,255,0.35);
+        outline-offset: 2px;
+        background: rgba(24,144,255,0.05);
+        cursor: text;
+      }
+    `;
+    doc.head.appendChild(style);
   };
 
   // Makes the rendered preview directly editable in place, and intercepts
@@ -288,8 +384,12 @@ const ModernEmailEditor: React.FC = () => {
       // Some browsers may restrict this on cross-origin/srcDoc edge cases; ignore.
     }
 
+    freezeMergeTags(doc);
+
     if ((doc as any).__linkHandlerAttached) return;
     (doc as any).__linkHandlerAttached = true;
+
+    injectHoverStyles(doc);
 
     // Prevent designMode from placing a text caret / resize handles inside
     // the link or image on mousedown.
@@ -329,12 +429,26 @@ const ModernEmailEditor: React.FC = () => {
         anchor.dataset.editId = `link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       }
       const href = anchor.getAttribute("href") || "";
-      const isTel = href.trim().toLowerCase().startsWith("tel:");
+      const hrefLower = href.trim().toLowerCase();
+      const isTel = hrefLower.startsWith("tel:");
+      const isMailto = hrefLower.startsWith("mailto:");
       const text = anchor.textContent || "";
+      // Buttons like "CONTACT ME" are always meant to open an email, even
+      // before they've been pointed at a real mailto: link (their href is
+      // still just the "#" placeholder at that point) — recognize them by
+      // their label so the modal goes straight to an email-only form.
+      const looksLikeContact = !isTel && /contact/i.test(text);
+
+      let type: "url" | "tel" | "email" = "url";
+      if (isTel) type = "tel";
+      else if (isMailto || looksLikeContact) type = "email";
+
+      const rawValue =
+        type === "tel" ? href.slice(4) : type === "email" ? href.replace(/^mailto:/i, "") : href;
 
       setLinkEditId(anchor.dataset.editId);
-      setLinkType(isTel ? "tel" : "url");
-      setLinkValue(isTel ? href.slice(4) : href);
+      setLinkType(type);
+      setLinkValue(rawValue === "#" ? "" : rawValue);
       setLinkText(text);
       setLinkOriginalText(text);
       setLinkModalOpen(true);
@@ -357,6 +471,8 @@ const ModernEmailEditor: React.FC = () => {
       const finalHref =
         linkType === "tel"
           ? `tel:${linkValue.replace(/[^\d+]/g, "")}`
+          : linkType === "email"
+          ? `mailto:${linkValue.trim().replace(/^mailto:/i, "")}`
           : /^(https?:\/\/|mailto:|#)/i.test(linkValue.trim())
           ? linkValue.trim()
           : `https://${linkValue.trim()}`;
@@ -437,13 +553,15 @@ const ModernEmailEditor: React.FC = () => {
             placeholder="Select a template"
             options={templates.map((t) => ({ value: t.name, label: t.title }))}
           />
-          <Button
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={() => setIsCreateModalOpen(true)}
-          >
-            Create New
-          </Button>
+          {isSuperAdmin && (
+            <Button
+              type="dashed"
+              icon={<PlusOutlined />}
+              onClick={() => setIsCreateModalOpen(true)}
+            >
+              Create New
+            </Button>
+          )}
         </Space>
 
         <Space wrap style={{ width: isMobile ? "100%" : "auto" }}>
@@ -511,20 +629,22 @@ const ModernEmailEditor: React.FC = () => {
               <p>{currentTemplate?.subject || "No subject set"}</p>
             </Card>
 
-            <Button
-              block
-              type="primary"
-              size="middle"
-              icon={<CodeOutlined />}
-              style={{ marginTop: "20px" }}
-              onClick={() => {
-                // Sync the modal with whatever was just edited inline on the preview.
-                setEditHtml(captureIframeHtml());
-                setIsEditModalOpen(true);
-              }}
-            >
-              Edit Source Code
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                block
+                type="primary"
+                size="middle"
+                icon={<CodeOutlined />}
+                style={{ marginTop: "20px" }}
+                onClick={() => {
+                  // Sync the modal with whatever was just edited inline on the preview.
+                  setEditHtml(captureIframeHtml());
+                  setIsEditModalOpen(true);
+                }}
+              >
+                Edit Source Code
+              </Button>
+            )}
           </>
         );
 
@@ -664,33 +784,58 @@ const ModernEmailEditor: React.FC = () => {
         onCancel={() => setLinkModalOpen(false)}
         okText="Save Link"
       >
-        <Space direction="vertical" style={{ width: "100%" }} size="middle">
-          <div>
-            <Text strong>Link Type</Text>
-            <div style={{ marginTop: 6 }}>
-              <Radio.Group value={linkType} onChange={(e) => setLinkType(e.target.value)}>
-                <Radio.Button value="url">Website URL</Radio.Button>
-                <Radio.Button value="tel">Phone Number</Radio.Button>
-              </Radio.Group>
+        {linkType === "email" ? (
+          // Contact-style buttons (e.g. "CONTACT ME") are always meant to
+          // open an email, so skip the link-type choice entirely — but the
+          // button's visible label should still be editable here too.
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
+            <div>
+              <Text strong>Email Address</Text>
+              <Input
+                type="email"
+                placeholder="e.g. reservations@theleela.com"
+                value={linkValue}
+                onChange={(e) => setLinkValue(e.target.value)}
+              />
             </div>
-          </div>
-          <div>
-            <Text strong>{linkType === "tel" ? "Phone Number" : "URL"}</Text>
-            <Input
-              placeholder={linkType === "tel" ? "e.g. +91 98765 43210" : "e.g. https://www.theleela.com/directions"}
-              value={linkValue}
-              onChange={(e) => setLinkValue(e.target.value)}
-            />
-          </div>
-          <div>
-            <Text strong>Link Text</Text>
-            <Input
-              placeholder="e.g. HOTEL DIRECTIONS"
-              value={linkText}
-              onChange={(e) => setLinkText(e.target.value)}
-            />
-          </div>
-        </Space>
+            <div>
+              <Text strong>Link Text</Text>
+              <Input
+                placeholder="e.g. CONTACT ME"
+                value={linkText}
+                onChange={(e) => setLinkText(e.target.value)}
+              />
+            </div>
+          </Space>
+        ) : (
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
+            <div>
+              <Text strong>Link Type</Text>
+              <div style={{ marginTop: 6 }}>
+                <Radio.Group value={linkType} onChange={(e) => setLinkType(e.target.value)}>
+                  <Radio.Button value="url">Website URL</Radio.Button>
+                  <Radio.Button value="tel">Phone Number</Radio.Button>
+                </Radio.Group>
+              </div>
+            </div>
+            <div>
+              <Text strong>{linkType === "tel" ? "Phone Number" : "URL"}</Text>
+              <Input
+                placeholder={linkType === "tel" ? "e.g. +91 98765 43210" : "e.g. https://www.theleela.com/directions"}
+                value={linkValue}
+                onChange={(e) => setLinkValue(e.target.value)}
+              />
+            </div>
+            <div>
+              <Text strong>Link Text</Text>
+              <Input
+                placeholder="e.g. HOTEL DIRECTIONS"
+                value={linkText}
+                onChange={(e) => setLinkText(e.target.value)}
+              />
+            </div>
+          </Space>
+        )}
       </Modal>
 
       {/* MODAL: EDIT IMAGE (logo / banner / thumbnail) */}

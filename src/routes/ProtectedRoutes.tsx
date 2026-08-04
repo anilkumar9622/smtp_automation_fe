@@ -14,8 +14,13 @@ const ProtectedRoute = ({ children }: Props) => {
 
   const parsedUser = JSON.parse(user);
 
-  // ❌ Block non-admin
-  if (parsedUser.role !== "ADMIN") {
+  // ❌ Block anyone without a recognized staff role — SUPER_ADMIN sees
+  // everything, ADMIN sees all properties (no create/source-edit), and
+  // PROPERTY_OPERATOR is scoped to their own property (enforced by the
+  // backend; the frontend also hides the buttons they can't use — see
+  // CustomTemplateEditor.tsx).
+  const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PROPERTY_OPERATOR"];
+  if (!ALLOWED_ROLES.includes(parsedUser.role)) {
     return <Navigate to="/" replace />;
   }
 

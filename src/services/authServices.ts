@@ -25,8 +25,9 @@ export const loginService = async (payload: LoginPayload) => {
 
     const { accessToken, user } = res.data.data;
 
-    if (user.role !== "ADMIN") {
-        throw new Error("Access denied. Only admin allowed.");
+    const allowedRoles = ["SUPER_ADMIN", "ADMIN", "PROPERTY_OPERATOR"];
+    if (!allowedRoles.includes(user.role)) {
+        throw new Error("Access denied.");
     }
 
     localStorage.setItem("token", accessToken);
