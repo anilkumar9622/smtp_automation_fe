@@ -10,9 +10,9 @@
 //   </BrowserRouter >)
 
 import './index.css';
-import React from 'react';
+// import React from 'react';
 // Import the legacy DOM package specifically to patch it
-import * as ReactDOM from 'react-dom'; 
+// import * as ReactDOM from 'react-dom'; 
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.tsx';

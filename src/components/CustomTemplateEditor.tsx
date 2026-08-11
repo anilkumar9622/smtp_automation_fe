@@ -251,7 +251,7 @@ const ModernEmailEditor: React.FC = () => {
   // (URL) or a phone number (tel:) inside the preview.
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkEditId, setLinkEditId] = useState<string>("");
-  const [linkType, setLinkType] = useState<"url" | "tel" | "email">("url");
+  const [linkType, setLinkType] = useState<"url" | "email">("url");
   const [linkValue, setLinkValue] = useState<string>("");
   const [linkText, setLinkText] = useState<string>("");
   const [linkOriginalText, setLinkOriginalText] = useState<string>("");
@@ -439,12 +439,12 @@ const ModernEmailEditor: React.FC = () => {
       // their label so the modal goes straight to an email-only form.
       const looksLikeContact = !isTel && /contact/i.test(text);
 
-      let type: "url" | "tel" | "email" = "url";
-      if (isTel) type = "tel";
-      else if (isMailto || looksLikeContact) type = "email";
+      // Just one generic "url" field for everything else (including
+      // existing tel: links, shown with their scheme intact — no separate
+      // Website URL / Phone Number toggle).
+      const type: "url" | "email" = isMailto || looksLikeContact ? "email" : "url";
 
-      const rawValue =
-        type === "tel" ? href.slice(4) : type === "email" ? href.replace(/^mailto:/i, "") : href;
+      const rawValue = type === "email" ? href.replace(/^mailto:/i, "") : href;
 
       setLinkEditId(anchor.dataset.editId);
       setLinkType(type);
@@ -469,11 +469,12 @@ const ModernEmailEditor: React.FC = () => {
     const el = doc?.querySelector(`[data-edit-id="${linkEditId}"]`) as HTMLAnchorElement | null;
     if (el) {
       const finalHref =
-        linkType === "tel"
-          ? `tel:${linkValue.replace(/[^\d+]/g, "")}`
-          : linkType === "email"
+        linkType === "email"
           ? `mailto:${linkValue.trim().replace(/^mailto:/i, "")}`
-          : /^(https?:\/\/|mailto:|#)/i.test(linkValue.trim())
+          // Generic scheme detection (http:, https:, tel:, mailto:, #, ...)
+          // so an existing tel: link (or anything else with an explicit
+          // scheme) round-trips untouched; a bare domain gets https://.
+          : /^[a-z][a-z0-9+.-]*:|^#/i.test(linkValue.trim())
           ? linkValue.trim()
           : `https://${linkValue.trim()}`;
       el.setAttribute("href", finalHref);
@@ -545,7 +546,8 @@ const ModernEmailEditor: React.FC = () => {
         zIndex: 10
       }}>
         <Space size="large" wrap style={{ width: isMobile ? "100%" : "auto" }}>
-          <Title level={4} style={{ margin: 0, color: "#1890ff" }}>Email Studio</Title>
+          {/* <Title level={4} style={{ margin: 0, color: "#1890ff" }}>Email Studio hgj</Title> */}
+          <img src="/logo.png" alt="Logo" style={{ height: "3rem", marginRight: 8 }} />
           <Select
             value={selectedKey}
             onChange={(val) => setSelectedKey(val)}
@@ -810,18 +812,9 @@ const ModernEmailEditor: React.FC = () => {
         ) : (
           <Space direction="vertical" style={{ width: "100%" }} size="middle">
             <div>
-              <Text strong>Link Type</Text>
-              <div style={{ marginTop: 6 }}>
-                <Radio.Group value={linkType} onChange={(e) => setLinkType(e.target.value)}>
-                  <Radio.Button value="url">Website URL</Radio.Button>
-                  <Radio.Button value="tel">Phone Number</Radio.Button>
-                </Radio.Group>
-              </div>
-            </div>
-            <div>
-              <Text strong>{linkType === "tel" ? "Phone Number" : "URL"}</Text>
+              <Text strong>URL</Text>
               <Input
-                placeholder={linkType === "tel" ? "e.g. +91 98765 43210" : "e.g. https://www.theleela.com/directions"}
+                placeholder="e.g. https://www.theleela.com/directions"
                 value={linkValue}
                 onChange={(e) => setLinkValue(e.target.value)}
               />
@@ -851,6 +844,17 @@ const ModernEmailEditor: React.FC = () => {
             <Upload
               showUploadList={false}
               accept="image/*"
+              beforeUpload={(file) => {
+                // Matches the backend's own 4MB multer limit (upload.route.ts)
+                // — checked here too so oversized files are rejected
+                // instantly instead of after a full upload round-trip.
+                const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+                if (file.size > MAX_UPLOAD_BYTES) {
+                  message.error("Image is too large — the maximum upload size is 4MB.");
+                  return Upload.LIST_IGNORE;
+                }
+                return true;
+              }}
               customRequest={async (options) => {
                 const { file, onSuccess, onError } = options;
                 setImageUploading(true);

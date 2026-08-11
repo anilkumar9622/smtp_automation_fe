@@ -1,5 +1,5 @@
 // import React from 'react';
-import profileLogo from '../assets/profile.png'
+// import profileLogo from '../assets/profile.png'
 import { AlignRightOutlined } from '@ant-design/icons';
 import logo from "../assets/logo.png";
 // import './App.css'

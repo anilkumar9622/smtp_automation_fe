@@ -1,8 +1,8 @@
 import CustomTemplateEditor from "./CustomTemplateEditor";
-import TemplateEditor from "./TemplateEditor";
-import TemplateEditor2 from "./TemplateEditor2";
+// import TemplateEditor from "./TemplateEditor";
+// import TemplateEditor2 from "./TemplateEditor2";
 
-export default function AppLayout(props:any) {
+export default function AppLayout() {
   return (
     <>
       {/* <Sidebar mobileOpen={props?.mobileOpen} setMobileOpen={props?.setMobileOpen} /> */}
