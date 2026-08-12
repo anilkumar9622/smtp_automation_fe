@@ -145,14 +145,14 @@
 // export default RawHtmlEditor;
 
 import React, { useState, useEffect, useRef } from "react";
-import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio, Upload, Grid } from "antd";
+import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio, Upload, Grid, Tabs } from "antd";
 import { PlusOutlined, CodeOutlined, EyeOutlined, SaveOutlined, EditOutlined, LinkOutlined, PictureOutlined, UploadOutlined } from "@ant-design/icons";
 import { getAllTemplatesService, saveTemplateService, uploadImageService, listImageGalleryService } from "../services/emailTemplateServices";
 import { PROPERTY_OPTIONS, PROPERTY_VARIANTS } from "../app-constant/propertyCodes";
 
 const { Header, Content, Sider } = Layout;
 const { TextArea } = Input;
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { useBreakpoint } = Grid;
 
 interface Template {
@@ -255,6 +255,16 @@ const ModernEmailEditor: React.FC = () => {
   const [linkValue, setLinkValue] = useState<string>("");
   const [linkText, setLinkText] = useState<string>("");
   const [linkOriginalText, setLinkOriginalText] = useState<string>("");
+
+  // The Leela DISCOVERY card's CTA link is a merge tag ({{discovery_cta_href}})
+  // whose real destination is decided per-email by the backend based on
+  // membership status — so instead of one URL field, it needs a separate
+  // URL for each state. Those two URLs are stored as data-join-href /
+  // data-login-href attributes on the anchor itself (read by the backend
+  // at send time), edited here via tabs instead of the plain URL field.
+  const [linkIsDiscoveryCta, setLinkIsDiscoveryCta] = useState(false);
+  const [discoveryJoinUrl, setDiscoveryJoinUrl] = useState<string>("");
+  const [discoveryLoginUrl, setDiscoveryLoginUrl] = useState<string>("");
 
   // "Edit Image" modal state — opened when the user clicks a logo, banner,
   // or thumbnail image (that isn't already part of a link) in the preview.
@@ -446,6 +456,16 @@ const ModernEmailEditor: React.FC = () => {
 
       const rawValue = type === "email" ? href.replace(/^mailto:/i, "") : href;
 
+      // Leela DISCOVERY CTA — its href is always the {{discovery_cta_href}}
+      // merge tag, resolved per-email by the backend. Give it its own
+      // tabbed Join/Login URL editor instead of the plain URL field.
+      const isDiscoveryCta = href.trim() === "{{discovery_cta_href}}";
+      setLinkIsDiscoveryCta(isDiscoveryCta);
+      if (isDiscoveryCta) {
+        setDiscoveryJoinUrl(anchor.getAttribute("data-join-href") || "https://www.theleela.com/discovery/enroll");
+        setDiscoveryLoginUrl(anchor.getAttribute("data-login-href") || "https://www.theleela.com/discovery/login");
+      }
+
       setLinkEditId(anchor.dataset.editId);
       setLinkType(type);
       setLinkValue(rawValue === "#" ? "" : rawValue);
@@ -467,6 +487,15 @@ const ModernEmailEditor: React.FC = () => {
   const handleLinkSave = () => {
     const doc = iframeRef.current?.contentDocument;
     const el = doc?.querySelector(`[data-edit-id="${linkEditId}"]`) as HTMLAnchorElement | null;
+    if (el && linkIsDiscoveryCta) {
+      // href/text stay as the merge tags ({{discovery_cta_href}} /
+      // {{discovery_cta_text}}) — only the two per-state destination URLs
+      // change, stored as data attributes the backend reads at send time.
+      el.setAttribute("data-join-href", discoveryJoinUrl.trim());
+      el.setAttribute("data-login-href", discoveryLoginUrl.trim());
+      setLinkModalOpen(false);
+      return;
+    }
     if (el) {
       const finalHref =
         linkType === "email"
@@ -786,7 +815,49 @@ const ModernEmailEditor: React.FC = () => {
         onCancel={() => setLinkModalOpen(false)}
         okText="Save Link"
       >
-        {linkType === "email" ? (
+        {linkIsDiscoveryCta ? (
+          // Leela DISCOVERY CTA: separate destination URLs for a guest who
+          // isn't enrolled yet (Join Now) vs. one who already is (Login) —
+          // the backend picks the right one per email; text/href here stay
+          // as merge tags.
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
+            <Text type="secondary">
+              This button's label and link automatically switch based on whether the guest already has a Leela DISCOVERY membership. Set the destination for each case below.
+            </Text>
+            <Tabs
+              items={[
+                {
+                  key: "join",
+                  label: "Join Now",
+                  children: (
+                    <div>
+                      <Text strong>URL for guests without a membership</Text>
+                      <Input
+                        placeholder="e.g. https://www.theleela.com/discovery/enroll"
+                        value={discoveryJoinUrl}
+                        onChange={(e) => setDiscoveryJoinUrl(e.target.value)}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  key: "login",
+                  label: "Login",
+                  children: (
+                    <div>
+                      <Text strong>URL for guests who already have a membership</Text>
+                      <Input
+                        placeholder="e.g. https://www.theleela.com/discovery/login"
+                        value={discoveryLoginUrl}
+                        onChange={(e) => setDiscoveryLoginUrl(e.target.value)}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </Space>
+        ) : linkType === "email" ? (
           // Contact-style buttons (e.g. "CONTACT ME") are always meant to
           // open an email, so skip the link-type choice entirely — but the
           // button's visible label should still be editable here too.
