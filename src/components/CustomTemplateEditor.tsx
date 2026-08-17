@@ -182,6 +182,7 @@ const ModernEmailEditor: React.FC = () => {
     }
   })();
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const isPropertyOperator = currentUser?.role === "PROPERTY_OPERATOR";
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -372,6 +373,16 @@ const ModernEmailEditor: React.FC = () => {
         background: rgba(24,144,255,0.05);
         cursor: text;
       }
+      ${isPropertyOperator ? `
+      [data-locked-section] { cursor: not-allowed !important; }
+      [data-locked-section]:hover {
+        outline: 2px dashed #bfbfbf !important;
+        outline-offset: 2px;
+        background: rgba(0,0,0,0.04) !important;
+        cursor: not-allowed !important;
+      }
+      [data-locked-section] *:hover { outline: none !important; background: transparent !important; cursor: not-allowed !important; }
+      ` : ""}
     `;
     doc.head.appendChild(style);
   };
@@ -395,6 +406,18 @@ const ModernEmailEditor: React.FC = () => {
     }
 
     freezeMergeTags(doc);
+
+    // Corporate-standard sections (marked data-locked-section in the
+    // template HTML — the greeting/intro paragraph, the Discovery
+    // programme description) stay visible but read-only for property
+    // operators; admins/superadmin keep full inline-edit access to them.
+    // Enforced again server-side on save, so this is a UI convenience, not
+    // the only guard.
+    if (isPropertyOperator) {
+      doc.querySelectorAll("[data-locked-section]").forEach((el) => {
+        el.setAttribute("contenteditable", "false");
+      });
+    }
 
     if ((doc as any).__linkHandlerAttached) return;
     (doc as any).__linkHandlerAttached = true;
@@ -497,15 +520,23 @@ const ModernEmailEditor: React.FC = () => {
       return;
     }
     if (el) {
-      const finalHref =
-        linkType === "email"
-          ? `mailto:${linkValue.trim().replace(/^mailto:/i, "")}`
-          // Generic scheme detection (http:, https:, tel:, mailto:, #, ...)
-          // so an existing tel: link (or anything else with an explicit
-          // scheme) round-trips untouched; a bare domain gets https://.
-          : /^[a-z][a-z0-9+.-]*:|^#/i.test(linkValue.trim())
-          ? linkValue.trim()
-          : `https://${linkValue.trim()}`;
+      const trimmedValue = linkValue.trim();
+      const finalHref = !trimmedValue
+        // An empty field (e.g. the user opened a still-unconfigured "#"
+        // button and saved without typing a URL) must fall back to a safe
+        // placeholder — otherwise this produces a bare "https://" with no
+        // domain, which Outlook's renderer displays as literal visible
+        // text glued onto the button label instead of a normal, silent
+        // placeholder link.
+        ? "#"
+        : linkType === "email"
+        ? `mailto:${trimmedValue.replace(/^mailto:/i, "")}`
+        // Generic scheme detection (http:, https:, tel:, mailto:, #, ...)
+        // so an existing tel: link (or anything else with an explicit
+        // scheme) round-trips untouched; a bare domain gets https://.
+        : /^[a-z][a-z0-9+.-]*:|^#/i.test(trimmedValue)
+        ? trimmedValue
+        : `https://${trimmedValue}`;
       el.setAttribute("href", finalHref);
       if (linkText !== linkOriginalText) {
         el.textContent = linkText;
@@ -557,7 +588,13 @@ const ModernEmailEditor: React.FC = () => {
     }
   };
 
-  if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", width: "100%" }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   return (
     <Layout style={{ height: "100%", width: "100%", minHeight: 0, background: "#f8f9fa", overflowY: isMobile ? "auto" : "hidden" }}>
@@ -916,15 +953,24 @@ const ModernEmailEditor: React.FC = () => {
               showUploadList={false}
               accept="image/*"
               beforeUpload={(file) => {
-                // Matches the backend's own 4MB multer limit (upload.route.ts)
-                // — checked here too so oversized files are rejected
-                // instantly instead of after a full upload round-trip.
+                // The backend auto-compresses anything over 4MB down to
+                // size (see compressImage.ts) rather than rejecting it, but
+                // that does mean trading some quality/dimensions for size —
+                // so an oversized file needs the user's OK before that
+                // happens instead of silently mangling their upload.
                 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
-                if (file.size > MAX_UPLOAD_BYTES) {
-                  message.error("Image is too large — the maximum upload size is 4MB.");
-                  return Upload.LIST_IGNORE;
-                }
-                return true;
+                if (file.size <= MAX_UPLOAD_BYTES) return true;
+
+                return new Promise<boolean | typeof Upload.LIST_IGNORE>((resolve) => {
+                  Modal.confirm({
+                    title: "Image is larger than 4MB",
+                    content: `This image is ${(file.size / (1024 * 1024)).toFixed(1)}MB. It will be automatically compressed to fit under 4MB, keeping its original dimensions where possible. Continue?`,
+                    okText: "Reduce and upload",
+                    cancelText: "Cancel",
+                    onOk: () => resolve(true),
+                    onCancel: () => resolve(Upload.LIST_IGNORE),
+                  });
+                });
               }}
               customRequest={async (options) => {
                 const { file, onSuccess, onError } = options;
@@ -937,7 +983,16 @@ const ModernEmailEditor: React.FC = () => {
                     { fileId: result.fileId, name: (file as File).name, url: result.url },
                     ...prev,
                   ]);
-                  message.success("Image uploaded to Google Drive");
+                  if (result.compression?.wasCompressed) {
+                    const { originalBytes, finalBytes, resized, quality, width, height } = result.compression;
+                    const toMB = (b: number) => (b / (1024 * 1024)).toFixed(1);
+                    message.success(
+                      `Image uploaded — compressed from ${toMB(originalBytes)}MB to ${toMB(finalBytes)}MB` +
+                        (resized ? ` (resized to ${width}×${height}, quality ${quality}%)` : ` (quality ${quality}%, dimensions kept)`)
+                    );
+                  } else {
+                    message.success("Image uploaded to Google Drive");
+                  }
                   onSuccess?.(result);
                 } catch (err: any) {
                   message.error(err.message || "Upload failed");

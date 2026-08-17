@@ -55,7 +55,21 @@ export const deleteTemplateService = async (name: string) => {
 
 // ✅ Upload an image (logo/banner/thumbnail) to Google Drive, get back a
 // publicly viewable link usable directly in template HTML.
-export const uploadImageService = async (file: File): Promise<{ url: string; fileId: string; viewUrl: string }> => {
+export interface ImageCompressionInfo {
+  wasCompressed: boolean;
+  originalBytes: number;
+  finalBytes: number;
+  originalWidth: number;
+  originalHeight: number;
+  width: number;
+  height: number;
+  quality: number;
+  resized: boolean;
+}
+
+export const uploadImageService = async (
+  file: File
+): Promise<{ url: string; fileId: string; viewUrl: string; compression?: ImageCompressionInfo }> => {
   try {
     const formData = new FormData();
     formData.append("file", file);
