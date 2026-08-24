@@ -4,7 +4,7 @@ import { AlignRightOutlined } from '@ant-design/icons';
 import logo from "../assets/logo.png";
 // import './App.css'
 import { LogoutOutlined } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { message } from 'antd';
 export default function Header({toggleSidebar}:any) {
   const date = new Date();
@@ -57,10 +57,17 @@ const handleLogout = () => {
 
 
       <div className="header-center">
-        <input type="text" placeholder="Search here..." className="search-bar" />
+        <nav className="header-nav">
+          <NavLink to="/template" className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}>
+            CMS Template
+          </NavLink>
+          <NavLink to="/email-details" className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}>
+            Email Details
+          </NavLink>
+        </nav>
       </div>
 
-     
+
       <div className="header-right">
         <div className="time">
           <span className="clock">{timeString}</span>
@@ -115,12 +122,28 @@ const handleLogout = () => {
   min-width: 250px;
 }
 
-.search-bar {
-  width: 100%;
-  // max-width: 400px;
-  padding: 12px 12px;
+.header-nav {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.header-nav-link {
+  padding: 8px 16px;
   border-radius: 8px;
-  border: 1px solid #ccc;
+  font-weight: 500;
+  color: #555;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.header-nav-link:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.header-nav-link.active {
+  background: #1890ff;
+  color: #fff;
 }
 
 .header-right {
@@ -172,8 +195,9 @@ const handleLogout = () => {
     margin: 10px 0;
   }
 
-  .search-bar {
-    width: 100%;
+  .header-nav {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .header-right {
