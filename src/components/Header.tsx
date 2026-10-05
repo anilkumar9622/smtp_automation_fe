@@ -75,18 +75,16 @@ const handleLogout = () => {
         </div>
         {/* <button className="icon-btn bg-outline">📩</button>
         <button className="icon-btn bg-outline">🔔</button> */}
-        <div className="logout-section">
-  <div className="menu-item change-password" onClick={() => navigate("/reset-password")}>
-    <LockOutlined className="menu-icon" />
-    Change Password
-  </div>
-</div>
-        <div className="logout-section">
-  <div className="menu-item logout" onClick={handleLogout}>
-    <LogoutOutlined className="menu-icon" />
-    Logout
-  </div>
-</div>
+        <div className="header-actions">
+          <button type="button" className="header-action-btn" title="Change Password" aria-label="Change Password" onClick={() => navigate("/reset-password")}>
+            <LockOutlined />
+            <span>Change Password</span>
+          </button>
+          <button type="button" className="header-action-btn logout" title="Logout" aria-label="Logout" onClick={handleLogout}>
+            <LogoutOutlined />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
       <style>
         {`
@@ -155,7 +153,7 @@ const handleLogout = () => {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 20px;
   text-align: right;
   flex: 1;
   justify-content: flex-end;
@@ -165,6 +163,10 @@ const handleLogout = () => {
 .time {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+  padding-right: 20px;
+  border-right: 1px solid #eee;
   font-size: 13px;
   // color: #333;
 }
@@ -229,24 +231,48 @@ const handleLogout = () => {
   .burger-btn { display: none; }
 }
 
-.logout-section {
-  // margin-top: auto;
-  // padding-top: 20px;
-  // border-top: 1px solid #eee;
-  cursor: pointer
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.menu-item.change-password {
+.header-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
-.menu-item.logout {
+.header-action-btn:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
+
+.header-action-btn.logout {
   color: #ff4d4f;
-  font-weight: 500;
+  border-color: #ffccc7;
 }
 
-.menu-item.logout:hover {
-  background: rgba(255, 77, 79, 0.1);
+.header-action-btn.logout:hover {
+  background: #fff1f0;
+  border-color: #ff4d4f;
+  color: #ff4d4f;
+}
+
+@media (max-width: 1100px) {
+  .header-action-btn span { display: none; }
+  .header-action-btn { padding: 0 10px; }
 }
 
 /* Icon spacing fix */
