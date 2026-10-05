@@ -35,3 +35,15 @@ export const loginService = async (payload: LoginPayload) => {
 
     return res;
 };
+
+export interface ChangePasswordPayload {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const changePasswordService = async (payload: ChangePasswordPayload) => {
+  const res = await api.post(API_ENDPOINTS.changePassword, payload);
+  return res;
+};

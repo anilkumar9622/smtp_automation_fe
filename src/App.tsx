@@ -2,6 +2,7 @@ import { useRoutes } from "react-router-dom";
 import EmailEditor from "./components/EmailEditor";
 import AppLayout from "./components/AppLayout";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import EmailDetails from "./pages/EmailDetails";
 import ProtectedRoute from "./routes/ProtectedRoutes";
 // import ProtectedRoute from "./routes/ProtectedRoute";
@@ -11,6 +12,10 @@ function App() {
     {
       path: "/",
       element: <Login />,
+    },
+    {
+      path: "/reset-password",
+      element: <ResetPassword />,
     },
     {
       path: "/template",

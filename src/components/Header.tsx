@@ -3,7 +3,7 @@
 import { AlignRightOutlined } from '@ant-design/icons';
 import logo from "../assets/logo.png";
 // import './App.css'
-import { LogoutOutlined } from "@ant-design/icons";
+import { LockOutlined, LogoutOutlined } from "@ant-design/icons";
 import { NavLink, useNavigate } from "react-router-dom";
 import { message } from 'antd';
 export default function Header({toggleSidebar}:any) {
@@ -75,6 +75,12 @@ const handleLogout = () => {
         </div>
         {/* <button className="icon-btn bg-outline">📩</button>
         <button className="icon-btn bg-outline">🔔</button> */}
+        <div className="logout-section">
+  <div className="menu-item change-password" onClick={() => navigate("/reset-password")}>
+    <LockOutlined className="menu-icon" />
+    Change Password
+  </div>
+</div>
         <div className="logout-section">
   <div className="menu-item logout" onClick={handleLogout}>
     <LogoutOutlined className="menu-icon" />
@@ -228,6 +234,10 @@ const handleLogout = () => {
   // padding-top: 20px;
   // border-top: 1px solid #eee;
   cursor: pointer
+}
+
+.menu-item.change-password {
+  font-weight: 500;
 }
 
 .menu-item.logout {

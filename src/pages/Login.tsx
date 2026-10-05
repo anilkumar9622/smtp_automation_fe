@@ -114,6 +114,8 @@ const Login = () => {
                     />
                     {errors.password && <p className="error" style={{ color: "red", fontSize: "12px", marginTop: "4px" }}>{errors.password}</p>}
 
+                    <Link to="/reset-password" className="forgot-link">Forgot / Reset password?</Link>
+
 
 
                     <Link to="/template" style={{ cursor: "pointer" }}> <button className="login-btn"
