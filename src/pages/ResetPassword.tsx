@@ -1,7 +1,7 @@
 import { useState } from "react";
 import "./login.css";
 import { LeelaLogo, LeelaBrandTitle, PoweredByFooter } from "../components/AuthBranding";
-import bg from "../assets/bg.png";
+import LoginSlider from "../components/LoginSlider";
 import { Link, useNavigate } from "react-router-dom";
 import { changePasswordService } from "../services/authServices";
 import { message } from "antd";
@@ -95,7 +95,7 @@ const ResetPassword = () => {
 
             {/* LEFT SIDE */}
             <div className="login-left">
-                <img src={bg} alt="bg" className="bg-image" />
+                <LoginSlider />
 
                 <div className="overlay">
                     <div className="brand">

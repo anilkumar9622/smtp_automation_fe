@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://tlphreps01.theleela.com:8449/api/v1", // change to your backend
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
 // Attach token automatically
