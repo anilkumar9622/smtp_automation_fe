@@ -3,6 +3,7 @@ import { Table, Input, DatePicker, Tag, Typography, Space, Tooltip, message } fr
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import { listIncomingEmailsService, type IncomingEmailRow } from "../services/incomingEmailServices";
 
 const { RangePicker } = DatePicker;
@@ -131,6 +132,7 @@ export default function EmailDetails() {
           }}
         />
       </div>
+      <Footer />
     </>
   );
 }

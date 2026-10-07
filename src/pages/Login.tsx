@@ -1,6 +1,6 @@
 import { useState } from "react";
-import "./Login.css";
-import logo from "../assets/logo.png";
+import "./login.css";
+import { LeelaLogo, LeelaBrandTitle, PoweredByFooter } from "../components/AuthBranding";
 import bg from "../assets/bg.png";
 import { Link, useNavigate } from "react-router-dom";
 import { loginService } from "../services/authServices";
@@ -73,8 +73,7 @@ const Login = () => {
 
                 <div className="overlay">
                     <div className="brand">
-                        <img src={logo} alt="logo" width={200} height={30} />
-                        {/* <span>TechinfoAK</span> */}
+                        <LeelaLogo />
                     </div>
 
                     <div className="left-text">
@@ -91,10 +90,10 @@ const Login = () => {
                 <button className="signin-btn-top">Sign in</button>
 
                 <div className="form-box">
-                    <h2 style={{ fontSize: "20px" }}>Welcome Back</h2>
+                    <LeelaBrandTitle />
+ <h2 style={{ fontSize: "20px", fontWeight: "bold" }}>Login</h2>
                     <p className="sub-text" style={{ fontSize: "13px" }}>Sign in your account</p>
-
-                    <label style={{ fontSize: "14px", marginTop: "30px" }}>Username or Email</label>
+                    <label style={{ fontSize: "14px", marginTop: 0 }}>Username or Email</label>
                     <input
                         type="text"
                         placeholder="Enter username or email"
@@ -133,6 +132,8 @@ const Login = () => {
                         Don’t have any account? <span>Register</span>
                     </p> */}
                 </div>
+
+                <PoweredByFooter />
             </div>
         </div>
     );

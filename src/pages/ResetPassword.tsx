@@ -1,6 +1,6 @@
 import { useState } from "react";
-import "./Login.css";
-import logo from "../assets/logo.png";
+import "./login.css";
+import { LeelaLogo, LeelaBrandTitle, PoweredByFooter } from "../components/AuthBranding";
 import bg from "../assets/bg.png";
 import { Link, useNavigate } from "react-router-dom";
 import { changePasswordService } from "../services/authServices";
@@ -99,7 +99,7 @@ const ResetPassword = () => {
 
                 <div className="overlay">
                     <div className="brand">
-                        <img src={logo} alt="logo" width={200} height={30} />
+                        <LeelaLogo />
                     </div>
 
                     <div className="left-text">
@@ -116,6 +116,7 @@ const ResetPassword = () => {
                 <button className="signin-btn-top" onClick={() => navigate("/")}>Sign in</button>
 
                 <div className="form-box">
+                    <LeelaBrandTitle />
                     <h2 style={{ fontSize: "20px" }}>Change Password</h2>
                     <p className="sub-text" style={{ fontSize: "13px" }}>Verify your current password to set a new one</p>
 
@@ -169,6 +170,8 @@ const ResetPassword = () => {
                         Back to Login
                     </Link>
                 </div>
+
+                <PoweredByFooter />
             </div>
         </div>
     );

@@ -1,7 +1,7 @@
 // import React from 'react';
 // import profileLogo from '../assets/profile.png'
 import { AlignRightOutlined } from '@ant-design/icons';
-import logo from "../assets/logo.png";
+import { LeelaLogo } from "./AuthBranding";
 // import './App.css'
 import { LockOutlined, LogoutOutlined } from "@ant-design/icons";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -42,7 +42,7 @@ const handleLogout = () => {
         <span className="profile-name">SMTP Automation</span>
         </div>  */}
         <div className="brands">
-            <img src={logo} alt="logo" width={130} height={40}/>
+            <LeelaLogo />
             {/* <span>TechinfoAK</span> */}
           </div>
           <button
@@ -127,27 +127,99 @@ const handleLogout = () => {
 }
 
 .header-nav {
-  display: flex;
+  display: inline-flex;
   justify-content: center;
-  gap: 24px;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff8f0 0%, #fdf1e4 100%);
+  border: 1px solid #f3dcc2;
+  box-shadow: inset 0 1px 2px rgba(196, 120, 40, 0.08), 0 2px 8px rgba(196, 120, 40, 0.06);
 }
 
 .header-nav-link {
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 500;
-  color: #555;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #7a5a3a;
   text-decoration: none;
   white-space: nowrap;
+  overflow: hidden;
+  isolation: isolate;
+  transition: color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Gradient layer that fades in on hover */
+.header-nav-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(232, 137, 52, 0.14), rgba(201, 151, 63, 0.18));
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/* Shine sweep */
+.header-nav-link::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  z-index: -1;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-20deg);
+  pointer-events: none;
 }
 
 .header-nav-link:hover {
-  background: rgba(0, 0, 0, 0.04);
+  color: #c2621a;
+  transform: translateY(-1px);
+}
+
+.header-nav-link:hover::before {
+  opacity: 1;
+}
+
+.header-nav-link:hover::after {
+  left: 125%;
+  transition: left 0.6s ease;
 }
 
 .header-nav-link.active {
-  background: #1890ff;
   color: #fff;
+  background: linear-gradient(135deg, #f0913a 0%, #e0701f 45%, #c9973f 100%);
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  box-shadow: 0 4px 14px rgba(224, 112, 31, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease, background-position 0.5s ease;
+}
+
+.header-nav-link.active::before {
+  display: none;
+}
+
+.header-nav-link.active:hover {
+  color: #fff;
+  background-position: 100% 50%;
+  box-shadow: 0 6px 20px rgba(224, 112, 31, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.header-nav-link:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.header-nav-link:focus-visible {
+  outline: 2px solid #e0701f;
+  outline-offset: 2px;
 }
 
 .header-right {

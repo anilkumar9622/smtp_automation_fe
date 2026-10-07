@@ -2,6 +2,7 @@ import React from 'react';
 import '../css/EmailEditor.css';
 import Header from './Header';
 import AppLayout from './AppLayout';
+import Footer from './Footer';
 
 // 1. Define the object with 'as const' for literal types
 // const TEMPLATES = {
@@ -62,6 +63,7 @@ const EmailEditor: React.FC = () => {
           <AppLayout  />
           {/* </TaskProvider> */}
         </div>
+        <Footer />
       </div></>
 
 

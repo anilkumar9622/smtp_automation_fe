@@ -152,7 +152,7 @@ import { PROPERTY_OPTIONS, PROPERTY_VARIANTS } from "../app-constant/propertyCod
 
 const { Header, Content, Sider } = Layout;
 const { TextArea } = Input;
-const { Text } = Typography;
+const { Text, Title } = Typography;
 const { useBreakpoint } = Grid;
 
 interface Template {
@@ -691,8 +691,20 @@ const ModernEmailEditor: React.FC = () => {
         zIndex: 10
       }}>
         <Space size="large" wrap style={{ width: isMobile ? "100%" : "auto" }}>
-          {/* <Title level={4} style={{ margin: 0, color: "#1890ff" }}>Email Studio hgj</Title> */}
-          <img src="/logo.png" alt="Logo" style={{ height: "3rem", marginRight: 8 }} />
+          <Title
+            level={5}
+            style={{
+              margin: 0,
+              whiteSpace: "nowrap",
+              fontWeight: 700,
+              background: "linear-gradient(135deg, #f0913a 0%, #e0701f 45%, #c9973f 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Email Template Studio
+          </Title>
           <Select
             value={selectedKey}
             onChange={(val) => setSelectedKey(val)}
