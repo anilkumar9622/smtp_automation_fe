@@ -194,6 +194,7 @@ const ModernEmailEditor: React.FC = () => {
   
   // Editor & New Template State
   const [editHtml, setEditHtml] = useState<string>("");
+  const [notesText, setNotesText] = useState<string>("");
   const [newTemplate, setNewTemplate] = useState<Template>({
     name: "",
     title: "",
@@ -240,13 +241,88 @@ const ModernEmailEditor: React.FC = () => {
 
   const currentTemplate = templates.find((t) => t.name === selectedKey);
 
-  useEffect(() => {
-    if (currentTemplate) setEditHtml(currentTemplate.html);
-  }, [currentTemplate]);
-
   // Ref to the live preview iframe, used to read/write the content the user
   // edits directly on the rendered template (instead of only via raw HTML).
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Mirrors notesText so the iframe's onLoad handler always sees the latest
+  // value, even when it fires before the state update has re-rendered.
+  const notesTextRef = useRef<string>("");
+  const [notesAnchorMissing, setNotesAnchorMissing] = useState(false);
+
+  useEffect(() => {
+    if (!currentTemplate) return;
+    const notes = readNotesFromHtml(currentTemplate.html);
+    notesTextRef.current = notes;
+    setNotesText(notes);
+    setEditHtml(currentTemplate.html);
+  }, [currentTemplate]);
+
+  // NOTES block — free text entered from the side panel (not editable in the
+  // preview itself) that renders right after the Policies section. It's
+  // stored inside the template HTML, so the backend sends it as-is with no
+  // extra merge data; when the notes are empty the block is removed entirely.
+  const NOTES_BLOCK_SELECTOR = "[data-template-notes-block]";
+  const NOTES_CONTENT_SELECTOR = "[data-template-notes-content]";
+
+  const readNotesFromHtml = (html: string): string => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const content = doc.querySelector(NOTES_CONTENT_SELECTOR);
+    if (!content) return "";
+    content.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    return content.textContent || "";
+  };
+
+  // The element the NOTES block goes after: the paragraph/div wrapping the
+  // {{policiesBlock}} merge tag (frozen into a span by freezeMergeTags), so
+  // the block sits inside the same padded section, below the policies.
+  const findPoliciesAnchor = (doc: Document): Element | null => {
+    const tag = doc.querySelector('[data-merge-tag="policiesBlock"]');
+    if (!tag) return null;
+    const parent = tag.parentElement;
+    return parent?.tagName === "P" ? parent : tag;
+  };
+
+  const syncNotesBlock = (doc: Document, value: string) => {
+    const existing = doc.querySelector(NOTES_BLOCK_SELECTOR);
+    const anchor = existing ? null : findPoliciesAnchor(doc);
+    setNotesAnchorMissing(!existing && !anchor);
+
+    if (!value.trim()) {
+      existing?.remove();
+      return;
+    }
+
+    let block = existing;
+    if (!block) {
+      if (!anchor) return;
+      block = doc.createElement("div");
+      block.setAttribute("data-template-notes-block", "true");
+      block.setAttribute("contenteditable", "false");
+      block.setAttribute("style", "margin-top:32px;");
+      block.innerHTML =
+        '<div style="font-size:18px;font-weight:bold;">NOTE</div>' +
+        '<div data-template-notes-content="true" style="line-height:1.9;color:#6a6a6a;"></div>';
+      anchor.after(block);
+    }
+
+    const content = block.querySelector(NOTES_CONTENT_SELECTOR);
+    if (!content) return;
+    content.textContent = "";
+    value.split(/\r?\n/).forEach((line, i) => {
+      if (i > 0) content.appendChild(doc.createElement("br"));
+      content.appendChild(doc.createTextNode(line));
+    });
+  };
+
+  // Updates the live preview in place (no iframe reload), so any unsaved
+  // inline edits made directly on the template are kept.
+  const handleNotesChange = (value: string) => {
+    notesTextRef.current = value;
+    setNotesText(value);
+    const doc = iframeRef.current?.contentDocument;
+    if (doc) syncNotesBlock(doc, value);
+  };
 
   // "Edit Link" modal state — opened when the user clicks a link/button
   // (URL) or a phone number (tel:) inside the preview.
@@ -367,6 +443,8 @@ const ModernEmailEditor: React.FC = () => {
       img:hover { outline: 2px dashed #52c41a; outline-offset: 2px; cursor: pointer !important; }
       a:hover img { outline: 2px dashed #1890ff; }
       [data-merge-tag]:hover { outline: 2px dashed #bfbfbf; cursor: not-allowed !important; background: rgba(0,0,0,0.05); }
+      [data-template-notes-block]:hover { outline: 2px dashed #bfbfbf; outline-offset: 4px; cursor: not-allowed !important; background: rgba(0,0,0,0.03); }
+      [data-template-notes-block] *:hover { outline: none !important; background: transparent !important; cursor: not-allowed !important; }
       p:hover, h1:hover, h2:hover, h3:hover, h4:hover, li:hover, span:hover:not([data-merge-tag]) {
         outline: 1px dashed rgba(24,144,255,0.35);
         outline-offset: 2px;
@@ -406,6 +484,7 @@ const ModernEmailEditor: React.FC = () => {
     }
 
     freezeMergeTags(doc);
+    syncNotesBlock(doc, notesTextRef.current);
 
     // Corporate-standard sections (marked data-locked-section in the
     // template HTML — the greeting/intro paragraph, the Discovery
@@ -695,6 +774,23 @@ const ModernEmailEditor: React.FC = () => {
               <Divider style={{ margin: "12px 0" }} />
               <Text type="secondary">Subject Line:</Text>
               <p>{currentTemplate?.subject || "No subject set"}</p>
+            </Card>
+
+            <Card size="small" title="Note" bordered={false} style={{ marginTop: 16 }}>
+              <Text type="secondary">Appears below the Policies section of the template. Leave empty to hide it.</Text>
+              <TextArea
+                aria-label="Template notes"
+                placeholder="Enter notes to include below Policies"
+                value={notesText}
+                onChange={(e) => handleNotesChange(e.target.value)}
+                autoSize={{ minRows: 4, maxRows: 10 }}
+                style={{ marginTop: 10 }}
+              />
+              {notesAnchorMissing && (
+                <Text type="warning" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
+                  This template has no {"{{policiesBlock}}"} section, so notes can't be placed.
+                </Text>
+              )}
             </Card>
 
             {isSuperAdmin && (
