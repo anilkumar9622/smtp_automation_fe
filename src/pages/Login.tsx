@@ -15,7 +15,6 @@ const Login = () => {
         email?: string;
         password?: string;
     }>({});
-    console.log({ errors, email, password })
     const validateEmail = () => {
         let error = "";
 
@@ -48,7 +47,6 @@ const Login = () => {
 
             if (errors.email || errors.password) return;
             const res: any = await loginService({ email, password });
-            // console.log({ res })
             if (res.status === 200) {
                 message.success("Login successful");
                 navigate("/template");
@@ -60,7 +58,6 @@ const Login = () => {
             // ✅ redirect to template page
 
         } catch (err: any) {
-            console.log({ err })
             message.error(err.response?.data?.message ?? err.message ?? "Something went wrong");
         }
     };

@@ -3,9 +3,12 @@ import { Navigate } from "react-router-dom";
 
 interface Props {
   children: JSX.Element;
+  // Narrows access further for pages only some staff roles may open
+  // (e.g. User Management). The backend enforces the same rules.
+  allowedRoles?: string[];
 }
 
-const ProtectedRoute = ({ children }: Props) => {
+const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   const user = localStorage.getItem("user");
 
   if (!user) {
@@ -22,6 +25,10 @@ const ProtectedRoute = ({ children }: Props) => {
   const ALLOWED_ROLES = ["SUPER_ADMIN", "ADMIN", "PROPERTY_OPERATOR"];
   if (!ALLOWED_ROLES.includes(parsedUser.role)) {
     return <Navigate to="/" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(parsedUser.role)) {
+    return <Navigate to="/template" replace />;
   }
 
   return children;

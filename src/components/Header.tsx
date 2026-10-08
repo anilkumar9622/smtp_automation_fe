@@ -6,6 +6,15 @@ import { LeelaLogo } from "./AuthBranding";
 import { LockOutlined, LogoutOutlined } from "@ant-design/icons";
 import { NavLink, useNavigate } from "react-router-dom";
 import { message } from 'antd';
+import { USER_MANAGER_ROLES } from "../app-constant";
+
+const getCurrentRole = (): string | undefined => {
+  try {
+    return JSON.parse(localStorage.getItem("user") ?? "{}").role;
+  } catch {
+    return undefined;
+  }
+};
 export default function Header({toggleSidebar}:any) {
   const date = new Date();
     const dateString = date.toLocaleDateString('en-GB', {
@@ -21,6 +30,7 @@ export default function Header({toggleSidebar}:any) {
   });
 
    const navigate = useNavigate();
+   const canManageUsers = USER_MANAGER_ROLES.includes(getCurrentRole() ?? "");
 
 const handleLogout = () => {
   // clear auth
@@ -64,6 +74,11 @@ const handleLogout = () => {
           <NavLink to="/email-details" className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}>
             Email Details
           </NavLink>
+          {canManageUsers && (
+            <NavLink to="/user-management" className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}>
+              User Management
+            </NavLink>
+          )}
         </nav>
       </div>
 
