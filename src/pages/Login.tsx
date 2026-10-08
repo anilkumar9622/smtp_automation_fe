@@ -61,7 +61,7 @@ const Login = () => {
 
         } catch (err: any) {
             console.log({ err })
-            message.error(err.response.data.message ?? err.message ?? "Something went wrong");
+            message.error(err.response?.data?.message ?? err.message ?? "Something went wrong");
         }
     };
     return (
