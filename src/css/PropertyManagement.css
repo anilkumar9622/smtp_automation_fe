@@ -1,0 +1,20 @@
+/* Property Management page — builds on the um-* classes in UserManagement.css. */
+
+.um-status.soon { color: #b8860b; background: #fdf6e3; }
+
+.pm-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d2a17;
+  background: #fff3e6;
+}
+
+.pm-date.ant-picker {
+  width: 100%;
+}

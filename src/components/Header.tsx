@@ -6,7 +6,9 @@ import { LeelaLogo } from "./AuthBranding";
 import { LockOutlined, LogoutOutlined } from "@ant-design/icons";
 import { NavLink, useNavigate } from "react-router-dom";
 import { message } from 'antd';
-import { USER_MANAGER_ROLES } from "../app-constant";
+// import { PROPERTY_MANAGER_ROLES, USER_MANAGER_ROLES } from "../app-constant";
+import {  USER_MANAGER_ROLES } from "../app-constant";
+
 
 const getCurrentRole = (): string | undefined => {
   try {
@@ -31,6 +33,7 @@ export default function Header({toggleSidebar}:any) {
 
    const navigate = useNavigate();
    const canManageUsers = USER_MANAGER_ROLES.includes(getCurrentRole() ?? "");
+  //  const canManageProperties = PROPERTY_MANAGER_ROLES.includes(getCurrentRole() ?? "");
 
 const handleLogout = () => {
   // clear auth
@@ -79,6 +82,11 @@ const handleLogout = () => {
               User Management
             </NavLink>
           )}
+          {/* {canManageProperties && (
+            <NavLink to="/property-management" className={({ isActive }) => `header-nav-link${isActive ? " active" : ""}`}>
+              Property Management
+            </NavLink>
+          )} */}
         </nav>
       </div>
 
