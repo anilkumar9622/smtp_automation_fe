@@ -324,15 +324,14 @@ const ModernEmailEditor: React.FC = () => {
     if (doc) syncNotesBlock(doc, value);
   };
 
-  // GREETING & INTRO — the corporate-standard opening paragraphs, marked
-  // data-locked-section="intro" in the template. Property operators can't
-  // change them (see the lock in enableInlineEditing and the backend's
-  // save check); admins/superadmin edit them from the side panel. The
-  // first paragraph is the greeting line ("Greetings from ...!"), the
-  // rest — separated by a blank line — are the body paragraphs below it.
+  // GREETING BODY — the corporate-standard paragraphs under "Dear
+  // {{guest_name}},", marked data-locked-section="intro" in the template.
+  // Property operators can't change them (see the lock in
+  // enableInlineEditing and the backend's save check); admins/superadmin
+  // edit them inline or from the side panel, one paragraph per block of
+  // text separated by a blank line.
   const INTRO_SECTION_SELECTOR = '[data-locked-section="intro"]';
   const canEditIntro = !isPropertyOperator;
-  const [introGreeting, setIntroGreeting] = useState<string>("");
   const [introBody, setIntroBody] = useState<string>("");
   const [introSectionMissing, setIntroSectionMissing] = useState(false);
 
@@ -358,17 +357,16 @@ const ModernEmailEditor: React.FC = () => {
     const section = findEditableIntroSection(doc);
     setIntroSectionMissing(!section);
     const paragraphs = section ? Array.from(section.querySelectorAll("p")).map(paragraphText).filter(Boolean) : [];
-    setIntroGreeting(paragraphs[0] || "");
-    setIntroBody(paragraphs.slice(1).join("\n\n"));
+    setIntroBody(paragraphs.join("\n\n"));
   };
 
   // Rebuilds the section as <p>…</p><br> pairs, the same markup the
   // templates already use, so spacing in the sent email doesn't change.
-  const writeIntroToDoc = (greeting: string, body: string) => {
+  const writeIntroToDoc = (body: string) => {
     const doc = iframeRef.current?.contentDocument;
     const section = doc && findEditableIntroSection(doc);
     if (!doc || !section) return;
-    const paragraphs = [greeting, ...body.split(/\n\s*\n/)].map((p) => p.trim()).filter(Boolean);
+    const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
     section.textContent = "";
     paragraphs.forEach((text) => {
       const p = doc.createElement("p");
@@ -381,14 +379,9 @@ const ModernEmailEditor: React.FC = () => {
     });
   };
 
-  const handleIntroGreetingChange = (value: string) => {
-    setIntroGreeting(value);
-    writeIntroToDoc(value, introBody);
-  };
-
   const handleIntroBodyChange = (value: string) => {
     setIntroBody(value);
-    writeIntroToDoc(introGreeting, value);
+    writeIntroToDoc(value);
   };
 
   // "Edit Link" modal state — opened when the user clicks a link/button
@@ -501,6 +494,10 @@ const ModernEmailEditor: React.FC = () => {
       span.replaceWith(span.textContent || "");
     });
     clone.querySelectorAll("[data-studio-only]").forEach((el) => el.remove());
+    // The read-only lock is applied per viewer on load (see
+    // enableInlineEditing) — saving it into the template would leave the
+    // section locked for admins too after a property operator's save.
+    clone.querySelectorAll("[data-locked-section]").forEach((el) => el.removeAttribute("contenteditable"));
     return `<!DOCTYPE html>\n${clone.outerHTML}`;
   };
 
@@ -566,11 +563,13 @@ const ModernEmailEditor: React.FC = () => {
     // operators; admins/superadmin keep full inline-edit access to them.
     // Enforced again server-side on save, so this is a UI convenience, not
     // the only guard.
-    if (isPropertyOperator) {
-      doc.querySelectorAll("[data-locked-section]").forEach((el) => {
-        el.setAttribute("contenteditable", "false");
-      });
-    }
+    // Templates saved by an operator before the lock was stripped on save
+    // carry contenteditable="false" in their HTML — clear it for
+    // admins/superadmin so those sections are editable again.
+    doc.querySelectorAll("[data-locked-section]").forEach((el) => {
+      if (isPropertyOperator) el.setAttribute("contenteditable", "false");
+      else el.removeAttribute("contenteditable");
+    });
 
     if ((doc as any).__linkHandlerAttached) return;
     (doc as any).__linkHandlerAttached = true;
@@ -1016,28 +1015,22 @@ const ModernEmailEditor: React.FC = () => {
             </Card>
 
             {canEditIntro && (
-              <Card size="small" title="Greeting & Intro" bordered={false} style={{ marginTop: 16 }}>
+              <Card size="small" title="Greeting Body" bordered={false} style={{ marginTop: 16 }}>
                 {introSectionMissing ? (
                   <Text type="warning" style={{ fontSize: 12 }}>
-                    This template's greeting can't be edited here — click into it in the preview to edit it directly.
+                    This template's greeting body can't be edited here — click into it in the preview to edit it directly.
                   </Text>
                 ) : (
                   <>
-                    <Text type="secondary">Greeting</Text>
-                    <Input
-                      aria-label="Greeting"
-                      placeholder="e.g. Greetings from The Leela Palace Bengaluru!"
-                      value={introGreeting}
-                      onChange={(e) => handleIntroGreetingChange(e.target.value)}
-                      style={{ marginTop: 6, marginBottom: 12 }}
-                    />
-                    <Text type="secondary">Body paragraphs (blank line between paragraphs)</Text>
+                    <Text type="secondary">
+                      The paragraphs under "Dear guest". Leave a blank line between paragraphs. You can also click into them in the preview.
+                    </Text>
                     <TextArea
                       aria-label="Greeting body paragraphs"
                       value={introBody}
                       onChange={(e) => handleIntroBodyChange(e.target.value)}
-                      autoSize={{ minRows: 5, maxRows: 14 }}
-                      style={{ marginTop: 6 }}
+                      autoSize={{ minRows: 8, maxRows: 20 }}
+                      style={{ marginTop: 10 }}
                     />
                   </>
                 )}
