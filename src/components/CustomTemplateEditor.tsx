@@ -324,6 +324,73 @@ const ModernEmailEditor: React.FC = () => {
     if (doc) syncNotesBlock(doc, value);
   };
 
+  // GREETING & INTRO — the corporate-standard opening paragraphs, marked
+  // data-locked-section="intro" in the template. Property operators can't
+  // change them (see the lock in enableInlineEditing and the backend's
+  // save check); admins/superadmin edit them from the side panel. The
+  // first paragraph is the greeting line ("Greetings from ...!"), the
+  // rest — separated by a blank line — are the body paragraphs below it.
+  const INTRO_SECTION_SELECTOR = '[data-locked-section="intro"]';
+  const canEditIntro = !isPropertyOperator;
+  const [introGreeting, setIntroGreeting] = useState<string>("");
+  const [introBody, setIntroBody] = useState<string>("");
+  const [introSectionMissing, setIntroSectionMissing] = useState(false);
+
+  const paragraphText = (p: Element): string => {
+    const clone = p.cloneNode(true) as Element;
+    clone.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    return (clone.textContent || "")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  // Only a section made of plain paragraphs can be rebuilt from the side
+  // panel; one with layout markup (tables, images, ...) would lose it, so
+  // that stays editable inline in the preview only.
+  const findEditableIntroSection = (doc: Document): Element | null => {
+    const section = doc.querySelector(INTRO_SECTION_SELECTOR);
+    return section && !section.querySelector("table, tr, td, div, img, a") ? section : null;
+  };
+
+  const readIntroFromDoc = (doc: Document) => {
+    const section = findEditableIntroSection(doc);
+    setIntroSectionMissing(!section);
+    const paragraphs = section ? Array.from(section.querySelectorAll("p")).map(paragraphText).filter(Boolean) : [];
+    setIntroGreeting(paragraphs[0] || "");
+    setIntroBody(paragraphs.slice(1).join("\n\n"));
+  };
+
+  // Rebuilds the section as <p>…</p><br> pairs, the same markup the
+  // templates already use, so spacing in the sent email doesn't change.
+  const writeIntroToDoc = (greeting: string, body: string) => {
+    const doc = iframeRef.current?.contentDocument;
+    const section = doc && findEditableIntroSection(doc);
+    if (!doc || !section) return;
+    const paragraphs = [greeting, ...body.split(/\n\s*\n/)].map((p) => p.trim()).filter(Boolean);
+    section.textContent = "";
+    paragraphs.forEach((text) => {
+      const p = doc.createElement("p");
+      text.split("\n").forEach((line, i) => {
+        if (i > 0) p.appendChild(doc.createElement("br"));
+        p.appendChild(doc.createTextNode(line));
+      });
+      section.appendChild(p);
+      section.appendChild(doc.createElement("br"));
+    });
+  };
+
+  const handleIntroGreetingChange = (value: string) => {
+    setIntroGreeting(value);
+    writeIntroToDoc(value, introBody);
+  };
+
+  const handleIntroBodyChange = (value: string) => {
+    setIntroBody(value);
+    writeIntroToDoc(introGreeting, value);
+  };
+
   // "Edit Link" modal state — opened when the user clicks a link/button
   // (URL) or a phone number (tel:) inside the preview.
   const [linkModalOpen, setLinkModalOpen] = useState(false);
@@ -352,17 +419,23 @@ const ModernEmailEditor: React.FC = () => {
   const [galleryImages, setGalleryImages] = useState<{ fileId: string; name: string; url: string }[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(false);
 
+  // An image inside a link (the footer's social media icons) has both a
+  // destination and an image — the "Edit Link" modal then also shows the
+  // image picker, and this is the data-edit-id of that <img>.
+  const [linkImageEditId, setLinkImageEditId] = useState<string>("");
+  const isImagePickerOpen = imageModalOpen || (linkModalOpen && Boolean(linkImageEditId));
+
   // Load the Drive gallery each time the modal opens, so newly uploaded
   // images (including the one just uploaded in this same session) show up
   // for reuse instead of triggering a duplicate upload.
   useEffect(() => {
-    if (!imageModalOpen) return;
+    if (!isImagePickerOpen) return;
     setGalleryLoading(true);
     listImageGalleryService()
       .then(setGalleryImages)
       .catch((err) => message.error(err.message || "Failed to load gallery"))
       .finally(() => setGalleryLoading(false));
-  }, [imageModalOpen]);
+  }, [isImagePickerOpen]);
 
   // Merge tags that stay directly editable in the preview even though
   // every other {{tag}} is frozen (see freezeMergeTags below) — these two
@@ -485,6 +558,7 @@ const ModernEmailEditor: React.FC = () => {
 
     freezeMergeTags(doc);
     syncNotesBlock(doc, notesTextRef.current);
+    readIntroFromDoc(doc);
 
     // Corporate-standard sections (marked data-locked-section in the
     // template HTML — the greeting/intro paragraph, the Discovery
@@ -503,6 +577,12 @@ const ModernEmailEditor: React.FC = () => {
 
     injectHoverStyles(doc);
 
+    // Keep the side panel's Greeting & Intro fields in step with text
+    // typed directly into that section of the preview.
+    doc.addEventListener("input", () => {
+      if (canEditIntro) readIntroFromDoc(doc);
+    });
+
     // Prevent designMode from placing a text caret / resize handles inside
     // the link or image on mousedown.
     doc.addEventListener("mousedown", (e) => {
@@ -519,7 +599,8 @@ const ModernEmailEditor: React.FC = () => {
 
       // An <img> that isn't wrapped in a link (logo/banner/thumbnail) gets
       // its own "Edit Image" modal. Images inside a link (e.g. social
-      // icons) fall through to the link modal below.
+      // icons) fall through to the link modal below, which then edits both
+      // the link and the icon image.
       if (img && !anchor) {
         e.preventDefault();
         e.stopPropagation();
@@ -566,6 +647,17 @@ const ModernEmailEditor: React.FC = () => {
       if (isDiscoveryCta) {
         setDiscoveryJoinUrl(anchor.getAttribute("data-join-href") || "https://www.theleela.com/discovery/enroll");
         setDiscoveryLoginUrl(anchor.getAttribute("data-login-href") || "https://www.theleela.com/discovery/login");
+      }
+
+      const linkedImg = anchor.querySelector("img");
+      if (linkedImg) {
+        if (!linkedImg.dataset.editId) {
+          linkedImg.dataset.editId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        }
+        setLinkImageEditId(linkedImg.dataset.editId);
+        setImageSrc(linkedImg.getAttribute("src") || "");
+      } else {
+        setLinkImageEditId("");
       }
 
       setLinkEditId(anchor.dataset.editId);
@@ -617,7 +709,12 @@ const ModernEmailEditor: React.FC = () => {
         ? trimmedValue
         : `https://${trimmedValue}`;
       el.setAttribute("href", finalHref);
-      if (linkText !== linkOriginalText) {
+      if (linkImageEditId) {
+        // Image links have no text of their own (setting textContent
+        // would wipe the <img>) — only the icon's src changes.
+        const img = doc?.querySelector(`[data-edit-id="${linkImageEditId}"]`);
+        if (img && imageSrc.trim()) img.setAttribute("src", imageSrc.trim());
+      } else if (linkText !== linkOriginalText) {
         el.textContent = linkText;
       }
     }
@@ -666,6 +763,136 @@ const ModernEmailEditor: React.FC = () => {
       newWindow.document.close();
     }
   };
+
+  // Upload / gallery / preview picker — shared by the "Edit Image" modal
+  // and the "Edit Link" modal for image links (social media icons).
+  const imagePicker = (
+    <Space direction="vertical" style={{ width: "100%" }} size="middle">
+      <div>
+        <Upload
+          showUploadList={false}
+          accept="image/*"
+          beforeUpload={(file) => {
+            // The backend auto-compresses anything over 4MB down to
+            // size (see compressImage.ts) rather than rejecting it, but
+            // that does mean trading some quality/dimensions for size —
+            // so an oversized file needs the user's OK before that
+            // happens instead of silently mangling their upload.
+            const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+            if (file.size <= MAX_UPLOAD_BYTES) return true;
+
+            return new Promise<boolean | typeof Upload.LIST_IGNORE>((resolve) => {
+              Modal.confirm({
+                title: "Image is larger than 4MB",
+                content: `This image is ${(file.size / (1024 * 1024)).toFixed(1)}MB. It will be automatically compressed to fit under 4MB, keeping its original dimensions where possible. Continue?`,
+                okText: "Reduce and upload",
+                cancelText: "Cancel",
+                onOk: () => resolve(true),
+                onCancel: () => resolve(Upload.LIST_IGNORE),
+              });
+            });
+          }}
+          customRequest={async (options) => {
+            const { file, onSuccess, onError } = options;
+            setImageUploading(true);
+            try {
+              const result = await uploadImageService(file as File);
+              setImageSrc(result.url);
+              // Show it in the gallery immediately, without waiting on a refetch.
+              setGalleryImages((prev) => [
+                { fileId: result.fileId, name: (file as File).name, url: result.url },
+                ...prev,
+              ]);
+              if (result.compression?.wasCompressed) {
+                const { originalBytes, finalBytes, resized, quality, width, height } = result.compression;
+                const toMB = (b: number) => (b / (1024 * 1024)).toFixed(1);
+                message.success(
+                  `Image uploaded — compressed from ${toMB(originalBytes)}MB to ${toMB(finalBytes)}MB` +
+                    (resized ? ` (resized to ${width}×${height}, quality ${quality}%)` : ` (quality ${quality}%, dimensions kept)`)
+                );
+              } else {
+                message.success("Image uploaded to Google Drive");
+              }
+              onSuccess?.(result);
+            } catch (err: any) {
+              message.error(err.message || "Upload failed");
+              onError?.(err);
+            } finally {
+              setImageUploading(false);
+            }
+          }}
+        >
+          <Button icon={<UploadOutlined />} loading={imageUploading} block>
+            {imageUploading ? "Uploading..." : "Upload from your computer"}
+          </Button>
+        </Upload>
+      </div>
+
+      <div>
+        <Text strong>Or choose from gallery</Text>
+        <div
+          style={{
+            marginTop: 6,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
+            gap: 8,
+            maxHeight: 220,
+            overflowY: "auto",
+            border: "1px solid #f0f0f0",
+            borderRadius: 8,
+            padding: 8,
+          }}
+        >
+          {galleryLoading && <Spin size="small" />}
+          {!galleryLoading && galleryImages.length === 0 && (
+            <Text type="secondary" style={{ fontSize: 12 }}>No images uploaded yet.</Text>
+          )}
+          {galleryImages.map((img) => (
+            <div
+              key={img.fileId}
+              onClick={() => setImageSrc(img.url)}
+              title={img.name}
+              style={{
+                cursor: "pointer",
+                border: imageSrc === img.url ? "2px solid #1890ff" : "1px solid #f0f0f0",
+                borderRadius: 6,
+                padding: 2,
+                height: 70,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              <img
+                src={img.url}
+                alt={img.name}
+                // lh3.googleusercontent.com rate-limits (429) requests
+                // that carry a Referer header, which browsers send by
+                // default for <img> tags but curl doesn't — hence why
+                // this worked in manual API testing but not on-screen.
+                referrerPolicy="no-referrer"
+                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {imageSrc.trim() && (
+        <div>
+          <Text strong>Selected</Text>
+          <div style={{ marginTop: 6, border: "1px solid #f0f0f0", borderRadius: 8, padding: 8, textAlign: "center" }}>
+            <img
+              src={imageSrc}
+              referrerPolicy="no-referrer"
+              style={{ maxWidth: "100%", maxHeight: 200, objectFit: "contain" }}
+            />
+          </div>
+        </div>
+      )}
+    </Space>
+  );
 
   if (loading) {
     return (
@@ -742,7 +969,7 @@ const ModernEmailEditor: React.FC = () => {
           <>
             <div style={{ width: isMobile ? "100%" : "920px", marginBottom: "12px", flexShrink: 0, boxSizing: "border-box" }}>
               <Text type="secondary">
-                <EditOutlined /> Click directly into the text below to edit it. <LinkOutlined /> Click a link or phone number to change its destination. <PictureOutlined /> Click a logo, banner, or thumbnail to swap its image. Then hit "Save Changes".
+                <EditOutlined /> Click directly into the text below to edit it. <LinkOutlined /> Click a link or phone number to change its destination. <PictureOutlined /> Click a logo, banner, thumbnail, or social media icon to swap its image. Then hit "Save Changes".
               </Text>
             </div>
             <div style={{
@@ -787,6 +1014,35 @@ const ModernEmailEditor: React.FC = () => {
               <Text type="secondary">Subject Line:</Text>
               <p>{currentTemplate?.subject || "No subject set"}</p>
             </Card>
+
+            {canEditIntro && (
+              <Card size="small" title="Greeting & Intro" bordered={false} style={{ marginTop: 16 }}>
+                {introSectionMissing ? (
+                  <Text type="warning" style={{ fontSize: 12 }}>
+                    This template's greeting can't be edited here — click into it in the preview to edit it directly.
+                  </Text>
+                ) : (
+                  <>
+                    <Text type="secondary">Greeting</Text>
+                    <Input
+                      aria-label="Greeting"
+                      placeholder="e.g. Greetings from The Leela Palace Bengaluru!"
+                      value={introGreeting}
+                      onChange={(e) => handleIntroGreetingChange(e.target.value)}
+                      style={{ marginTop: 6, marginBottom: 12 }}
+                    />
+                    <Text type="secondary">Body paragraphs (blank line between paragraphs)</Text>
+                    <TextArea
+                      aria-label="Greeting body paragraphs"
+                      value={introBody}
+                      onChange={(e) => handleIntroBodyChange(e.target.value)}
+                      autoSize={{ minRows: 5, maxRows: 14 }}
+                      style={{ marginTop: 6 }}
+                    />
+                  </>
+                )}
+              </Card>
+            )}
 
             <Card size="small" title="Note" bordered={false} style={{ marginTop: 16 }}>
               <Text type="secondary">Appears below the Policies section of the template. Leave empty to hide it.</Text>
@@ -1035,14 +1291,21 @@ const ModernEmailEditor: React.FC = () => {
                 onChange={(e) => setLinkValue(e.target.value)}
               />
             </div>
-            <div>
-              <Text strong>Link Text</Text>
-              <Input
-                placeholder="e.g. HOTEL DIRECTIONS"
-                value={linkText}
-                onChange={(e) => setLinkText(e.target.value)}
-              />
-            </div>
+            {linkImageEditId ? (
+              <div>
+                <Text strong>Icon Image</Text>
+                <div style={{ marginTop: 6 }}>{imagePicker}</div>
+              </div>
+            ) : (
+              <div>
+                <Text strong>Link Text</Text>
+                <Input
+                  placeholder="e.g. HOTEL DIRECTIONS"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                />
+              </div>
+            )}
           </Space>
         )}
       </Modal>
@@ -1055,131 +1318,7 @@ const ModernEmailEditor: React.FC = () => {
         onCancel={() => setImageModalOpen(false)}
         okText="Save Image"
       >
-        <Space direction="vertical" style={{ width: "100%" }} size="middle">
-          <div>
-            <Upload
-              showUploadList={false}
-              accept="image/*"
-              beforeUpload={(file) => {
-                // The backend auto-compresses anything over 4MB down to
-                // size (see compressImage.ts) rather than rejecting it, but
-                // that does mean trading some quality/dimensions for size —
-                // so an oversized file needs the user's OK before that
-                // happens instead of silently mangling their upload.
-                const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
-                if (file.size <= MAX_UPLOAD_BYTES) return true;
-
-                return new Promise<boolean | typeof Upload.LIST_IGNORE>((resolve) => {
-                  Modal.confirm({
-                    title: "Image is larger than 4MB",
-                    content: `This image is ${(file.size / (1024 * 1024)).toFixed(1)}MB. It will be automatically compressed to fit under 4MB, keeping its original dimensions where possible. Continue?`,
-                    okText: "Reduce and upload",
-                    cancelText: "Cancel",
-                    onOk: () => resolve(true),
-                    onCancel: () => resolve(Upload.LIST_IGNORE),
-                  });
-                });
-              }}
-              customRequest={async (options) => {
-                const { file, onSuccess, onError } = options;
-                setImageUploading(true);
-                try {
-                  const result = await uploadImageService(file as File);
-                  setImageSrc(result.url);
-                  // Show it in the gallery immediately, without waiting on a refetch.
-                  setGalleryImages((prev) => [
-                    { fileId: result.fileId, name: (file as File).name, url: result.url },
-                    ...prev,
-                  ]);
-                  if (result.compression?.wasCompressed) {
-                    const { originalBytes, finalBytes, resized, quality, width, height } = result.compression;
-                    const toMB = (b: number) => (b / (1024 * 1024)).toFixed(1);
-                    message.success(
-                      `Image uploaded — compressed from ${toMB(originalBytes)}MB to ${toMB(finalBytes)}MB` +
-                        (resized ? ` (resized to ${width}×${height}, quality ${quality}%)` : ` (quality ${quality}%, dimensions kept)`)
-                    );
-                  } else {
-                    message.success("Image uploaded to Google Drive");
-                  }
-                  onSuccess?.(result);
-                } catch (err: any) {
-                  message.error(err.message || "Upload failed");
-                  onError?.(err);
-                } finally {
-                  setImageUploading(false);
-                }
-              }}
-            >
-              <Button icon={<UploadOutlined />} loading={imageUploading} block>
-                {imageUploading ? "Uploading..." : "Upload from your computer"}
-              </Button>
-            </Upload>
-          </div>
-
-          <div>
-            <Text strong>Or choose from gallery</Text>
-            <div
-              style={{
-                marginTop: 6,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
-                gap: 8,
-                maxHeight: 220,
-                overflowY: "auto",
-                border: "1px solid #f0f0f0",
-                borderRadius: 8,
-                padding: 8,
-              }}
-            >
-              {galleryLoading && <Spin size="small" />}
-              {!galleryLoading && galleryImages.length === 0 && (
-                <Text type="secondary" style={{ fontSize: 12 }}>No images uploaded yet.</Text>
-              )}
-              {galleryImages.map((img) => (
-                <div
-                  key={img.fileId}
-                  onClick={() => setImageSrc(img.url)}
-                  title={img.name}
-                  style={{
-                    cursor: "pointer",
-                    border: imageSrc === img.url ? "2px solid #1890ff" : "1px solid #f0f0f0",
-                    borderRadius: 6,
-                    padding: 2,
-                    height: 70,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                  }}
-                >
-                  <img
-                    src={img.url}
-                    alt={img.name}
-                    // lh3.googleusercontent.com rate-limits (429) requests
-                    // that carry a Referer header, which browsers send by
-                    // default for <img> tags but curl doesn't — hence why
-                    // this worked in manual API testing but not on-screen.
-                    referrerPolicy="no-referrer"
-                    style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {imageSrc.trim() && (
-            <div>
-              <Text strong>Selected</Text>
-              <div style={{ marginTop: 6, border: "1px solid #f0f0f0", borderRadius: 8, padding: 8, textAlign: "center" }}>
-                <img
-                  src={imageSrc}
-                  referrerPolicy="no-referrer"
-                  style={{ maxWidth: "100%", maxHeight: 200, objectFit: "contain" }}
-                />
-              </div>
-            </div>
-          )}
-        </Space>
+        {imagePicker}
       </Modal>
     </Layout>
   );
