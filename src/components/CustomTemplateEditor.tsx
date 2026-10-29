@@ -182,7 +182,6 @@ const ModernEmailEditor: React.FC = () => {
     }
   })();
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
-  const isPropertyOperator = currentUser?.role === "PROPERTY_OPERATOR";
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -326,12 +325,9 @@ const ModernEmailEditor: React.FC = () => {
 
   // GREETING BODY — the corporate-standard paragraphs under "Dear
   // {{guest_name}},", marked data-locked-section="intro" in the template.
-  // Property operators can't change them (see the lock in
-  // enableInlineEditing and the backend's save check); admins/superadmin
-  // edit them inline or from the side panel, one paragraph per block of
-  // text separated by a blank line.
+  // Every role (property operators included) edits them inline or from the
+  // side panel, one paragraph per block of text separated by a blank line.
   const INTRO_SECTION_SELECTOR = '[data-locked-section="intro"]';
-  const canEditIntro = !isPropertyOperator;
   const [introBody, setIntroBody] = useState<string>("");
   const [introSectionMissing, setIntroSectionMissing] = useState(false);
 
@@ -494,9 +490,7 @@ const ModernEmailEditor: React.FC = () => {
       span.replaceWith(span.textContent || "");
     });
     clone.querySelectorAll("[data-studio-only]").forEach((el) => el.remove());
-    // The read-only lock is applied per viewer on load (see
-    // enableInlineEditing) — saving it into the template would leave the
-    // section locked for admins too after a property operator's save.
+    // Never save a leftover read-only lock back into the template.
     clone.querySelectorAll("[data-locked-section]").forEach((el) => el.removeAttribute("contenteditable"));
     return `<!DOCTYPE html>\n${clone.outerHTML}`;
   };
@@ -521,16 +515,6 @@ const ModernEmailEditor: React.FC = () => {
         background: rgba(24,144,255,0.05);
         cursor: text;
       }
-      ${isPropertyOperator ? `
-      [data-locked-section] { cursor: not-allowed !important; }
-      [data-locked-section]:hover {
-        outline: 2px dashed #bfbfbf !important;
-        outline-offset: 2px;
-        background: rgba(0,0,0,0.04) !important;
-        cursor: not-allowed !important;
-      }
-      [data-locked-section] *:hover { outline: none !important; background: transparent !important; cursor: not-allowed !important; }
-      ` : ""}
     `;
     doc.head.appendChild(style);
   };
@@ -557,19 +541,10 @@ const ModernEmailEditor: React.FC = () => {
     syncNotesBlock(doc, notesTextRef.current);
     readIntroFromDoc(doc);
 
-    // Corporate-standard sections (marked data-locked-section in the
-    // template HTML — the greeting/intro paragraph, the Discovery
-    // programme description) stay visible but read-only for property
-    // operators; admins/superadmin keep full inline-edit access to them.
-    // Enforced again server-side on save, so this is a UI convenience, not
-    // the only guard.
-    // Templates saved by an operator before the lock was stripped on save
-    // carry contenteditable="false" in their HTML — clear it for
-    // admins/superadmin so those sections are editable again.
-    doc.querySelectorAll("[data-locked-section]").forEach((el) => {
-      if (isPropertyOperator) el.setAttribute("contenteditable", "false");
-      else el.removeAttribute("contenteditable");
-    });
+    // Templates saved while property operators had a read-only lock on
+    // some sections may carry contenteditable="false" in their HTML —
+    // clear it so every role can edit those sections.
+    doc.querySelectorAll("[data-locked-section]").forEach((el) => el.removeAttribute("contenteditable"));
 
     if ((doc as any).__linkHandlerAttached) return;
     (doc as any).__linkHandlerAttached = true;
@@ -579,7 +554,7 @@ const ModernEmailEditor: React.FC = () => {
     // Keep the side panel's Greeting & Intro fields in step with text
     // typed directly into that section of the preview.
     doc.addEventListener("input", () => {
-      if (canEditIntro) readIntroFromDoc(doc);
+      readIntroFromDoc(doc);
     });
 
     // Prevent designMode from placing a text caret / resize handles inside
@@ -1014,28 +989,26 @@ const ModernEmailEditor: React.FC = () => {
               <p>{currentTemplate?.subject || "No subject set"}</p>
             </Card>
 
-            {canEditIntro && (
-              <Card size="small" title="Greeting Body" bordered={false} style={{ marginTop: 16 }}>
-                {introSectionMissing ? (
-                  <Text type="warning" style={{ fontSize: 12 }}>
-                    This template's greeting body can't be edited here — click into it in the preview to edit it directly.
+            <Card size="small" title="Greeting Body" bordered={false} style={{ marginTop: 16 }}>
+              {introSectionMissing ? (
+                <Text type="warning" style={{ fontSize: 12 }}>
+                  This template's greeting body can't be edited here — click into it in the preview to edit it directly.
+                </Text>
+              ) : (
+                <>
+                  <Text type="secondary">
+                    The paragraphs under "Dear guest". Leave a blank line between paragraphs. You can also click into them in the preview.
                   </Text>
-                ) : (
-                  <>
-                    <Text type="secondary">
-                      The paragraphs under "Dear guest". Leave a blank line between paragraphs. You can also click into them in the preview.
-                    </Text>
-                    <TextArea
-                      aria-label="Greeting body paragraphs"
-                      value={introBody}
-                      onChange={(e) => handleIntroBodyChange(e.target.value)}
-                      autoSize={{ minRows: 8, maxRows: 20 }}
-                      style={{ marginTop: 10 }}
-                    />
-                  </>
-                )}
-              </Card>
-            )}
+                  <TextArea
+                    aria-label="Greeting body paragraphs"
+                    value={introBody}
+                    onChange={(e) => handleIntroBodyChange(e.target.value)}
+                    autoSize={{ minRows: 8, maxRows: 20 }}
+                    style={{ marginTop: 10 }}
+                  />
+                </>
+              )}
+            </Card>
 
             <Card size="small" title="Note" bordered={false} style={{ marginTop: 16 }}>
               <Text type="secondary">Appears below the Policies section of the template. Leave empty to hide it.</Text>
