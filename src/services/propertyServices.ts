@@ -4,10 +4,18 @@ import api from "./api";
 export interface ManagedProperty {
   property_code: string;
   property_name: string;
+  is_active: boolean;
   expiry_date: string | null;
   is_expired: boolean;
   updated_by_email: string | null;
+  created_at: string | null;
   updated_at: string | null;
+}
+
+export interface PropertyOption {
+  code: string;
+  name: string;
+  is_active: boolean;
 }
 
 const errorMessage = (error: any, fallback: string) =>
@@ -39,5 +47,43 @@ export const setBulkPropertyExpiryService = async (expiryDate: string | null, pr
     return res.data.message;
   } catch (error: any) {
     throw new Error(errorMessage(error, "Failed to update expiry"));
+  }
+};
+
+// Every signed-in role can read this — feeds the property dropdowns.
+export const listPropertyOptionsService = async (): Promise<PropertyOption[]> => {
+  try {
+    const res = await api.get(API_ENDPOINTS.propertyOptions);
+    return res.data.data;
+  } catch (error: any) {
+    throw new Error(errorMessage(error, "Failed to fetch properties"));
+  }
+};
+
+export const createPropertyService = async (input: { property_code: string; property_name: string; is_active: boolean }): Promise<string> => {
+  try {
+    const res = await api.post(API_ENDPOINTS.propertyCreate, input);
+    return res.data.message;
+  } catch (error: any) {
+    throw new Error(errorMessage(error, "Failed to create property"));
+  }
+};
+
+// The code can't be changed — only the name and enabled flag.
+export const updatePropertyService = async (propertyCode: string, input: { property_name?: string; is_active?: boolean }): Promise<string> => {
+  try {
+    const res = await api.put(API_ENDPOINTS.propertyUpdate(propertyCode), input);
+    return res.data.message;
+  } catch (error: any) {
+    throw new Error(errorMessage(error, "Failed to update property"));
+  }
+};
+
+export const deletePropertyService = async (propertyCode: string): Promise<string> => {
+  try {
+    const res = await api.delete(API_ENDPOINTS.propertyDelete(propertyCode));
+    return res.data.message;
+  } catch (error: any) {
+    throw new Error(errorMessage(error, "Failed to delete property"));
   }
 };

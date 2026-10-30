@@ -18,7 +18,7 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { PROPERTY_OPTIONS } from "../app-constant/propertyCodes";
+import usePropertyOptions from "../hooks/usePropertyOptions";
 import {
   createUserService,
   listUsersService,
@@ -43,9 +43,6 @@ const ROLE_META: Record<UserRole, { label: string; color: string }> = {
 
 // Passwords older than this get flagged in the table.
 const PASSWORD_STALE_DAYS = 90;
-
-const propertyName = (code: string | null) =>
-  PROPERTY_OPTIONS.find((p) => p.code === code)?.name ?? code;
 
 const initials = (name: string) =>
   name
@@ -79,6 +76,7 @@ interface UserFormValues extends UserFormPayload {
 export default function UserManagement() {
   const currentUser = useMemo(getCurrentUser, []);
   const isSuperAdmin = currentUser.role === "SUPER_ADMIN";
+  const { nameOf: propertyName, selectOptions } = usePropertyOptions();
 
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +141,7 @@ export default function UserManagement() {
   const roleOptions = (isSuperAdmin ? (Object.keys(ROLE_META) as UserRole[]) : (["PROPERTY_OPERATOR"] as UserRole[]))
     .map((role) => ({ value: role, label: ROLE_META[role].label }));
 
-  const propertyOptions = PROPERTY_OPTIONS.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` }));
+  const propertyOptions = selectOptions;
 
   const openAddModal = () => {
     setEditingUser(null);

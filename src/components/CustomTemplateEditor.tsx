@@ -148,7 +148,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button, Select, message, Spin, Modal, Input, Layout, Space, Divider, Typography, Card, Radio, Upload, Grid, Tabs } from "antd";
 import { PlusOutlined, CodeOutlined, EyeOutlined, SaveOutlined, EditOutlined, LinkOutlined, PictureOutlined, UploadOutlined } from "@ant-design/icons";
 import { getAllTemplatesService, saveTemplateService, uploadImageService, listImageGalleryService } from "../services/emailTemplateServices";
-import { PROPERTY_OPTIONS, PROPERTY_VARIANTS } from "../app-constant/propertyCodes";
+import { PROPERTY_VARIANTS } from "../app-constant/propertyCodes";
+import usePropertyOptions from "../hooks/usePropertyOptions";
+import NotesEditorModal from "./NotesEditorModal";
+import { isEmptyNote } from "../app-constant/notesHtml";
+import { normalizeTemplateFonts } from "../app-constant/templateFonts";
 
 const { Header, Content, Sider } = Layout;
 const { TextArea } = Input;
@@ -182,6 +186,7 @@ const ModernEmailEditor: React.FC = () => {
     }
   })();
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+  const { options: propertyOptions, selectOptions: propertySelectOptions } = usePropertyOptions();
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedKey, setSelectedKey] = useState<string>("");
@@ -193,7 +198,9 @@ const ModernEmailEditor: React.FC = () => {
   
   // Editor & New Template State
   const [editHtml, setEditHtml] = useState<string>("");
+  // The NOTE block's HTML (rich text, edited in NotesEditorModal).
   const [notesText, setNotesText] = useState<string>("");
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState<boolean>(false);
   const [newTemplate, setNewTemplate] = useState<Template>({
     name: "",
     title: "",
@@ -209,7 +216,7 @@ const ModernEmailEditor: React.FC = () => {
   // picking a property + variant auto-fills name/title/property_name —
   // still editable afterward if you want a custom internal name.
   const applyPropertyAndVariant = (propertyCode?: string, variant: "customer" | "agent" = newVariant) => {
-    const property = PROPERTY_OPTIONS.find((p) => p.code === propertyCode);
+    const property = propertyOptions.find((p) => p.code === propertyCode);
     if (!property) return;
     setNewTemplate((prev) => ({
       ...prev,
@@ -257,7 +264,7 @@ const ModernEmailEditor: React.FC = () => {
     setEditHtml(currentTemplate.html);
   }, [currentTemplate]);
 
-  // NOTES block — free text entered from the side panel (not editable in the
+  // NOTES block — rich text entered from the side panel (not editable in the
   // preview itself) that renders right after the Policies section. It's
   // stored inside the template HTML, so the backend sends it as-is with no
   // extra merge data; when the notes are empty the block is removed entirely.
@@ -267,9 +274,9 @@ const ModernEmailEditor: React.FC = () => {
   const readNotesFromHtml = (html: string): string => {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const content = doc.querySelector(NOTES_CONTENT_SELECTOR);
-    if (!content) return "";
-    content.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
-    return content.textContent || "";
+    // Older templates hold plain text with <br>s — that's valid HTML too,
+    // so the rich-text editor opens it as-is.
+    return content ? content.innerHTML : "";
   };
 
   // The element the NOTES block goes after: the paragraph/div wrapping the
@@ -287,7 +294,7 @@ const ModernEmailEditor: React.FC = () => {
     const anchor = existing ? null : findPoliciesAnchor(doc);
     setNotesAnchorMissing(!existing && !anchor);
 
-    if (!value.trim()) {
+    if (isEmptyNote(value)) {
       existing?.remove();
       return;
     }
@@ -307,11 +314,7 @@ const ModernEmailEditor: React.FC = () => {
 
     const content = block.querySelector(NOTES_CONTENT_SELECTOR);
     if (!content) return;
-    content.textContent = "";
-    value.split(/\r?\n/).forEach((line, i) => {
-      if (i > 0) content.appendChild(doc.createElement("br"));
-      content.appendChild(doc.createTextNode(line));
-    });
+    content.innerHTML = value;
   };
 
   // Updates the live preview in place (no iframe reload), so any unsaved
@@ -490,6 +493,7 @@ const ModernEmailEditor: React.FC = () => {
       span.replaceWith(span.textContent || "");
     });
     clone.querySelectorAll("[data-studio-only]").forEach((el) => el.remove());
+    normalizeTemplateFonts(clone);
     // Never save a leftover read-only lock back into the template.
     clone.querySelectorAll("[data-locked-section]").forEach((el) => el.removeAttribute("contenteditable"));
     return `<!DOCTYPE html>\n${clone.outerHTML}`;
@@ -538,8 +542,17 @@ const ModernEmailEditor: React.FC = () => {
     }
 
     freezeMergeTags(doc);
+    // Clears foreign fonts already saved into the template (e.g. from an
+    // earlier paste) — persisted on the next Save.
+    normalizeTemplateFonts(doc);
     syncNotesBlock(doc, notesTextRef.current);
     readIntroFromDoc(doc);
+    try {
+      // Enter starts a <p> (like the template's own markup), not a <div>.
+      doc.execCommand("defaultParagraphSeparator", false, "p");
+    } catch {
+      // Not supported everywhere; harmless.
+    }
 
     // Templates saved while property operators had a read-only lock on
     // some sections may carry contenteditable="false" in their HTML —
@@ -555,6 +568,15 @@ const ModernEmailEditor: React.FC = () => {
     // typed directly into that section of the preview.
     doc.addEventListener("input", () => {
       readIntroFromDoc(doc);
+    });
+
+    // Paste as plain text only — pasted rich text (Word, Outlook, web
+    // pages) brings its own fonts/sizes, which then go out in the email.
+    doc.addEventListener("paste", (e) => {
+      const text = e.clipboardData?.getData("text/plain");
+      if (text === undefined) return;
+      e.preventDefault();
+      doc.execCommand("insertText", false, text);
     });
 
     // Prevent designMode from placing a text caret / resize handles inside
@@ -1012,20 +1034,38 @@ const ModernEmailEditor: React.FC = () => {
 
             <Card size="small" title="Note" bordered={false} style={{ marginTop: 16 }}>
               <Text type="secondary">Appears below the Policies section of the template. Leave empty to hide it.</Text>
-              <TextArea
-                aria-label="Template notes"
-                placeholder="Enter notes to include below Policies"
-                value={notesText}
-                onChange={(e) => handleNotesChange(e.target.value)}
-                autoSize={{ minRows: 4, maxRows: 10 }}
+              {isEmptyNote(notesText) ? (
+                <div className="notes-preview"><Text type="secondary" italic>No note added.</Text></div>
+              ) : (
+                <div className="notes-preview" dangerouslySetInnerHTML={{ __html: notesText }} />
+              )}
+              <Button
+                block
+                icon={<EditOutlined />}
                 style={{ marginTop: 10 }}
-              />
+                disabled={notesAnchorMissing}
+                onClick={() => setIsNotesModalOpen(true)}
+              >
+                {isEmptyNote(notesText) ? "Add Note" : "Edit Note"}
+              </Button>
               {notesAnchorMissing && (
                 <Text type="warning" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
                   This template has no {"{{policiesBlock}}"} section, so notes can't be placed.
                 </Text>
               )}
             </Card>
+
+            {isNotesModalOpen && (
+              <NotesEditorModal
+                open
+                value={notesText}
+                onCancel={() => setIsNotesModalOpen(false)}
+                onSave={(html) => {
+                  handleNotesChange(html);
+                  setIsNotesModalOpen(false);
+                }}
+              />
+            )}
 
             {isSuperAdmin && (
               <Button
@@ -1071,8 +1111,12 @@ const ModernEmailEditor: React.FC = () => {
             <Content style={{ padding: "30px", minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", alignItems: "center" }}>
               {previewCanvas}
             </Content>
-            <Sider width={300} theme="light" style={{ borderLeft: "1px solid #f0f0f0", padding: "20px" }}>
-              {infoSidebar}
+            <Sider width={300} theme="light" style={{ borderLeft: "1px solid #f0f0f0", height: "100%", minHeight: 0 }}>
+              {/* The Sider is pinned to the viewport height, so its cards
+                 (Template Info, Greeting Body, Note, ...) scroll inside it. */}
+              <div style={{ height: "100%", overflowY: "auto", padding: "20px", boxSizing: "border-box" }}>
+                {infoSidebar}
+              </div>
             </Sider>
           </Layout>
         );
@@ -1094,7 +1138,7 @@ const ModernEmailEditor: React.FC = () => {
               placeholder="Not property-specific"
               style={{ width: '100%' }}
               value={newTemplate.property_code || undefined}
-              options={PROPERTY_OPTIONS.map((p) => ({ value: p.code, label: `${p.name} (${p.code})` }))}
+              options={propertySelectOptions}
               onChange={(code) => applyPropertyAndVariant(code)}
               onClear={() => setNewTemplate((prev) => ({ ...prev, property_code: undefined, property_name: undefined }))}
             />

@@ -5,10 +5,9 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import EmailDetails from "./pages/EmailDetails";
 import UserManagement from "./pages/UserManagement";
-// import PropertyManagement from "./pages/PropertyManagement";
+import PropertyManagement from "./pages/PropertyManagement";
 import ProtectedRoute from "./routes/ProtectedRoutes";
-// import { PROPERTY_MANAGER_ROLES, USER_MANAGER_ROLES } from "./app-constant";
-import { USER_MANAGER_ROLES } from "./app-constant";
+import { PROPERTY_MANAGER_ROLES, USER_MANAGER_ROLES } from "./app-constant";
 
 // import ProtectedRoute from "./routes/ProtectedRoute";
 import "antd/dist/reset.css";
@@ -46,14 +45,14 @@ function App() {
         </ProtectedRoute>
       ),
     },
-    // {
-    //   path: "/property-management",
-    //   element: (
-    //     <ProtectedRoute allowedRoles={PROPERTY_MANAGER_ROLES}>
-    //       <PropertyManagement />
-    //     </ProtectedRoute>
-    //   ),
-    // },
+    {
+      path: "/property-management",
+      element: (
+        <ProtectedRoute allowedRoles={PROPERTY_MANAGER_ROLES}>
+          <PropertyManagement />
+        </ProtectedRoute>
+      ),
+    },
     {
       path: "/app",
       element: <AppLayout />,
